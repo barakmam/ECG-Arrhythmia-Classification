@@ -1,0 +1,10 @@
+MIT-BIH:
+main article: https://ieeexplore.ieee.org/document/8759878
+https://physionet.org/content/mitdb/1.0.0/
+https://archive.physionet.org/faq.shtml
+how mit-bih created: https://physionet.org/physiobank/database/html/mitdbdir/intro.htm
+work with wfdb: https://github.com/MIT-LCP/wfdb-python/blob/master/demo.ipynb
+https://github.com/physhik/ecg-mit-bih
+kaggle: https://www.kaggle.com/shayanfazeli/heartbeat
+
+
