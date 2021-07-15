@@ -11,7 +11,7 @@ def load_raw_data(df, sampling_rate, path):
     data = np.array([signal for signal, meta in data])
     return data
 
-path = 'path/to/ptbxl/'
+path = './dataset/'
 sampling_rate=100
 
 # load and convert annotation data
@@ -43,3 +43,6 @@ y_train = Y[(Y.strat_fold != test_fold)].diagnostic_superclass
 # Test
 X_test = X[np.where(Y.strat_fold == test_fold)]
 y_test = Y[Y.strat_fold == test_fold].diagnostic_superclass
+
+
+a=1
