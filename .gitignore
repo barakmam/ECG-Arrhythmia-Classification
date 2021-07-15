@@ -1,6 +1,5 @@
 *.csv
 *.zip
-dataset/
 mit_data/
 *.xml
 *.iml
