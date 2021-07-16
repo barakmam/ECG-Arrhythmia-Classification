@@ -34,16 +34,12 @@ class Dataset:
         if case == "Train":
             return {
                 "age": Y[~np.isin(Y.strat_fold, test_fold)].age,
-                "sex": Y[~np.isin(Y.strat_fold, test_fold)].sex,
-                "height": Y[~np.isin(Y.strat_fold, test_fold)].height,
-                "weight": Y[~np.isin(Y.strat_fold, test_fold)].weight,
+                "sex": Y[~np.isin(Y.strat_fold, test_fold)].sex
             }
         else:
             return {
                 "age": Y[np.isin(Y.strat_fold, test_fold)].age,
-                "sex": Y[np.isin(Y.strat_fold, test_fold)].sex,
-                "height": Y[np.isin(Y.strat_fold, test_fold)].height,
-                "weight": Y[np.isin(Y.strat_fold, test_fold)].weight,
+                "sex": Y[np.isin(Y.strat_fold, test_fold)].sex
             }
 
     def load(self):
