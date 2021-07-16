@@ -1,6 +1,7 @@
 from data.dataset import Dataset
 import ecg_plot
 import numpy as np
+import ast
 
 
 class Blend(Dataset):
@@ -16,42 +17,83 @@ class Blend(Dataset):
         self.coeff_A = 0.5
         self.coeff_B = 0.5
 
+    def custom_operator(self, a, b, op):
+        if op == "<":
+            return a < b
+        elif op == ">=":
+            return a >= b
+
+    def trancate(self, a, b):
+        if len(a) != len(b):
+            if len(a) > len(b):
+                a = a[:-1]
+            else:
+                b = b[:-1]
+
+        return a, b
+
     def find_pairs(self):
         """
-        pairs male and female with the same age(under/above 50)
+        pairs male with the same age(under/above 50)
+        and female with the same age(under/above 50)
         :return:
         """
 
         d = {
-            0: {
-                "A": [],
-                "B": [],
-                "Y": []
+            0: {  # male
+                '<': {  # less than 50
+                    "A": [],
+                    "B": [],
+                    "Y": []
+                },
+                '>=': {  # over
+                    "A": [],
+                    "B": [],
+                    "Y": []
+                }
+
             },
-            1: {
-                "A": [],
-                "B": [],
-                "Y": []
+            1: {  # female
+                '<': {  # less than 50
+                    "A": [],
+                    "B": [],
+                    "Y": []
+                },
+                '>=': {  # over 50
+                    "A": [],
+                    "B": [],
+                    "Y": []
+                }
             }
         }
 
         genders = [0, 1]
+        ops = ["<", ">="]
         age_th = 50
-        mask_below = [True] * (len(self.X_train) // 2) + [False] * (len(self.X_train) // 2)
-        mask_above = [False] * (len(self.X_train) // 2) + [True] * (len(self.X_train) // 2)
+        mask_below = np.array(list(range(len(self.X_train)))) < len(self.X_train) // 2
+        mask_above = list(reversed(mask_below))
 
         for gender in genders:
-            #below th
-            d[gender]["A"] += [self.X_train[np.isin(self.X_train_meta["sex"], gender) & (self.X_train_meta["age"] < age_th) & mask_below]]
-            d[gender]["B"] += [self.X_train[np.isin(self.X_train_meta["sex"], gender) & (self.X_train_meta["age"] < age_th) & mask_above]]
+            for op in ops:
+                d[gender][op]["A"] = self.X_train[np.isin(self.X_train_meta["sex"], gender) & self.custom_operator(
+                    self.X_train_meta["age"], age_th, op) & mask_below]
+                d[gender][op]["B"] = self.X_train[np.isin(self.X_train_meta["sex"], gender) & self.custom_operator(
+                    self.X_train_meta["age"], age_th, op) & mask_above]
 
-            # above th
-            d[gender]["A"] += [self.X_train[np.isin(self.X_train_meta["sex"], gender) & (self.X_train_meta["age"] >= age_th) & mask_below]]
-            d[gender]["B"] += [self.X_train[np.isin(self.X_train_meta["sex"], gender) & (self.X_train_meta["age"] >= age_th) & mask_above]]
+                d[gender][op]["A"], d[gender][op]["B"] = self.trancate(d[gender][op]["A"], d[gender][op]["B"])
 
+                a = self.y_train[
+                    np.isin(self.X_train_meta["sex"], gender) & self.custom_operator(self.X_train_meta["age"], age_th,
+                                                                                     op) & mask_below]
+                b = self.y_train[
+                    np.isin(self.X_train_meta["sex"], gender) & self.custom_operator(self.X_train_meta["age"], age_th,
+                                                                                     op) & mask_above]
 
+                a, b = self.trancate(a, b)
 
-            # d[gender]["Y"] =
+                d[gender][op]["Y"] = [np.vstack((a, b))]
+
+        return d
 
     def plot_ecg(self, ecg):
         ecg_plot.plot(ecg, sample_rate=100, title='ECG 12', columns=1)
@@ -60,5 +102,5 @@ class Blend(Dataset):
 
 if __name__ == "__main__":
     b = Blend()
-    b.find_pairs()
-    # b.plot_ecg(b.X_train[0].T)
+    pairs=b.find_pairs()
+    b.plot_ecg(pairs[0]['<']["A"][0].T)
