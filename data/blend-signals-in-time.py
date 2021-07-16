@@ -7,8 +7,10 @@ class Blend(Dataset):
         super().__init__()
         data = self.load()
         self.X_train = data["X_train"]
+        self.X_train_meta = data["X_train_meta"]
         self.y_train = data["y_train"]
         self.X_test = data["X_test"]
+        self.X_test_meta = data["X_test_meta"]
         self.y_test = data["y_test"]
 
 
