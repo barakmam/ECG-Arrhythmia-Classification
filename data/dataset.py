@@ -4,7 +4,6 @@ import wfdb
 import ast
 
 
-
 class Dataset:
     def __init__(self):
 
@@ -30,6 +29,19 @@ class Dataset:
         data = np.array([signal for signal, meta in data])
         return data
 
+    def extract_meta(self, Y, test_fold, case):
+
+        if case == "Train":
+            return {
+                "age": Y[~np.isin(Y.strat_fold, test_fold)].age,
+                "sex": Y[~np.isin(Y.strat_fold, test_fold)].sex
+            }
+        else:
+            return {
+                "age": Y[np.isin(Y.strat_fold, test_fold)].age,
+                "sex": Y[np.isin(Y.strat_fold, test_fold)].sex
+            }
+
     def load(self):
         # load and convert annotation data
         Y = pd.read_csv(self.path + 'ptbxl_database.csv', index_col='ecg_id')
@@ -42,18 +54,22 @@ class Dataset:
         Y['diagnostic_superclass'] = Y.scp_codes.apply(self.aggregate_diagnostic)
 
         # Split data into train and test
-        test_fold = 10
+        test_fold = [10]
         # Train
-        X_train = X[np.where(Y.strat_fold != test_fold)]
-        y_train = Y[(Y.strat_fold != test_fold)].diagnostic_superclass
+        X_train = X[~np.isin(Y.strat_fold, test_fold)]
+        X_train_meta = self.extract_meta(Y, test_fold, case="Train")
+        y_train = Y[~np.isin(Y.strat_fold, test_fold)].diagnostic_superclass
 
         # Test
-        X_test = X[np.where(Y.strat_fold == test_fold)]
-        y_test = Y[Y.strat_fold == test_fold].diagnostic_superclass
+        X_test = X[np.isin(Y.strat_fold, test_fold)]
+        X_test_meta = self.extract_meta(Y, test_fold, case="Test")
+        y_test = Y[np.isin(Y.strat_fold, test_fold)].diagnostic_superclass
 
         return {
             "X_train": X_train,
+            "X_train_meta": X_train_meta,
             "y_train": y_train,
             "X_test": X_test,
+            "X_test_meta": X_test_meta,
             "y_test": y_test
         }
