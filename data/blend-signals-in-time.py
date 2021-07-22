@@ -208,9 +208,20 @@ class Blend(Dataset):
         ecg_plot.plot(A, sample_rate=100, title="{}-{}-{}-{}".format(meta_A, gender_str, op_str, Y_A), columns=1)
         ecg_plot.plot(B, sample_rate=100, title="{}-{}-{}-{}".format(meta_B, gender_str, op_str, Y_B), columns=1)
 
+        combine_signals(A, B)
         #<-- this is where the blending should happen
 
         ecg_plot.show()
+
+
+def combine_signals(sig_A, sig_B):
+    a = sig_A[0]
+    b = sig_B[0]
+
+    c = a + b
+    return c
+
+
 
 
 if __name__ == "__main__":
