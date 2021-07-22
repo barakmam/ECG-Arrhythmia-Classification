@@ -46,7 +46,7 @@ class Blend(Dataset):
                     "B": [],
                     "Y": []
                 },
-                '>=': {  # over
+                '>=': {  # over 50
                     "A": [],
                     "B": [],
                     "Y": []
@@ -95,12 +95,26 @@ class Blend(Dataset):
 
         return d
 
-    def plot_ecg(self, ecg):
-        ecg_plot.plot(ecg, sample_rate=100, title='ECG 12', columns=1)
+    def plot_ecg(self, pairs):
+
+        gender = 0  # 0 male ; 1 female
+        gender_str="male" if not gender else "female"
+        op = '<'
+        op_str="under 50" if op=='<' else "above 50"
+        index = 0
+        gender = pairs[gender]
+
+        A = gender[op]["A"][index].T
+        B = gender[op]["B"][index].T
+        Y_A = gender[op]["Y"][index][0][0][0]
+        Y_B = gender[op]["Y"][index][1][0][0]
+
+        ecg_plot.plot(A, sample_rate=100, title="A-{}-{}-{}".format(gender_str,op_str, Y_A), columns=1)
+        ecg_plot.plot(B, sample_rate=100, title="B-{}-{}-{}".format(gender_str,op_str, Y_B), columns=1)
         ecg_plot.show()
 
 
 if __name__ == "__main__":
     b = Blend()
-    pairs=b.find_pairs()
-    b.plot_ecg(pairs[0]['<']["A"][0].T)
+    pairs = b.find_pairs()
+    b.plot_ecg(pairs)
