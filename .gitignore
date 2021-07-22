@@ -5,3 +5,4 @@ mit_data/
 *.xml
 *.iml
 dataset/
+/data/pkl/
