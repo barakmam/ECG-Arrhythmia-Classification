@@ -11,14 +11,16 @@ class Blend(Dataset):
         super().__init__()
         data = self.load()
         self.pre_load_pkl_data = False
+        self.pkl_file_relative_path = "./data/data.pickle"
         self.X_train = data["X_train"]
         self.X_train_meta = data["X_train_meta"]
         self.y_train = data["y_train"]
         self.X_test = data["X_test"]
         self.X_test_meta = data["X_test_meta"]
         self.y_test = data["y_test"]
-        self.coeff_A = 0.5
-        self.coeff_B = 0.5
+
+        self.coeff_A = 0.5 # <-- how much does A effect the blending
+        self.coeff_B = 0.5 # <-- how much does B effect the blending
         self.genders = [0, 1]
         self.ops = ["<", ">="]
         self.age_th = 50
@@ -121,7 +123,7 @@ class Blend(Dataset):
 
     def permutate_and_pkl(self, d):
         """
-        Create 4 pkl files for the permutations of the following groups {male,female},{<,>=}
+        Create a pkl file which contains the permutations of the following groups {male,female},{<,>=}
         :param d: a dict containing the {male,female},{<,>=},{A,B,Y}
         :return: a dict containing the {male,female},{<,>=},{A,B,Y} permutated
         """
@@ -174,21 +176,26 @@ class Blend(Dataset):
                         pkl_dict[gender][op]["meta_B"].append(d[gender][op]["meta_B"][idx[1]])
                         pkl_dict[gender][op]["Y"].append(r[2])
 
-            with open(f'./data/pkl/data.pickle', 'wb') as handle:
+            with open(self.pkl_file_relative_path, 'wb') as handle:
                 pickle.dump(pkl_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
         else:
-            with open(f'./data/data.pickle', 'rb') as handle:
+            with open(self.pkl_file_relative_path, 'rb') as handle:
                 pkl_dict = pickle.load(handle)
 
         return pkl_dict
 
-    def plot_ecg(self, pairs):
+    def blend_and_plot_ecg(self, pairs,index):
+        """
+        Display the ecg of a selected index
+        :param pairs: a dict containing the {male,female},{<,>=},{A,B,Y} permutated
+        :param index: the index of the pair for which we will preform the blending
+        :return: None
+        """
 
         gender = 0  # 0 male ; 1 female
         gender_str = "male" if not gender else "female"
         op = '<'
         op_str = "under 50" if op == '<' else "above 50"
-        index = 0
         gender = pairs[gender]
 
         A = gender[op]["A"][index].T
@@ -200,12 +207,14 @@ class Blend(Dataset):
 
         ecg_plot.plot(A, sample_rate=100, title="{}-{}-{}-{}".format(meta_A, gender_str, op_str, Y_A), columns=1)
         ecg_plot.plot(B, sample_rate=100, title="{}-{}-{}-{}".format(meta_B, gender_str, op_str, Y_B), columns=1)
+
+        #<-- this is where the blending should happen
+
         ecg_plot.show()
 
 
 if __name__ == "__main__":
     b = Blend()
     pairs = b.find_pairs()
-    b.permutate_and_pkl(pairs)
-
-    b.plot_ecg(pairs)
+    pairs = b.permutate_and_pkl(pairs)
+    b.blend_and_plot_ecg(pairs,0)
