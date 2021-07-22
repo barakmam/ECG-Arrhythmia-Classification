@@ -101,7 +101,6 @@ for ii in range(X_train.shape[0]):
     freqs = np.fft.fftshift(np.fft.fftfreq(len(X_train[ii, :, 0]), 1/sample_rate))
     plt.plot(freqs, np.abs(np.fft.fftshift(np.fft.fft(X_train[ii, :, 0]))))
     # plt.xticks(np.arange(-2000, 2000, 500), np.arange(-2000, 2000, 500))
-    # plt.xticks(ks,ksHz)
     plt.title("Frequency Domain - " + y_train.iloc[ii][0], fontsize=16)
     plt.xlabel("Frequency [Hz]", fontsize=16)
     # plt.ylabel("|Fourier Coefficient|")
