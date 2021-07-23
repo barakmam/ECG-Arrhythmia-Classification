@@ -184,6 +184,19 @@ class Blend(Dataset):
 
         return pkl_dict
 
+
+    def blend_in_time(self,A,B):
+        """
+        Blend two matricies in time
+        :param A: 12x1000 ndarray
+        :param B: 12x1000 ndarray
+        :return: C 12x1000 ndarray blended with self.coeff_A and self.coeff_B ratios
+        """
+
+        a=A[0]
+        b=B[0]
+
+        raise NotImplemented
     def blend_and_plot_ecg(self, pairs,index):
         """
         Display the ecg of a selected index
@@ -209,6 +222,7 @@ class Blend(Dataset):
         ecg_plot.plot(B, sample_rate=100, title="{}-{}-{}-{}".format(meta_B, gender_str, op_str, Y_B), columns=1)
 
         #<-- this is where the blending should happen
+        #C=self.blend_in_time(A,B)
 
         ecg_plot.show()
 
