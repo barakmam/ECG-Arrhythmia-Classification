@@ -105,7 +105,7 @@ class Blend(Dataset):
         self.age_th = 50
 
         # STFT
-        self.STFT_show=True
+        self.STFT_show = True
         self.STFT_gender = 0
         self.STFT_op = "<"
         self.hop = 1
@@ -192,7 +192,7 @@ class Blend(Dataset):
 
         return d
 
-    def STFT(signal, win, hopSize, F, Fs):
+    def STFT(self, signal, win, hopSize, F, Fs):
         if not hasattr(win, "__len__"):
             win = np.hamming(win)
         if not hasattr(F, "__len__"):
@@ -243,12 +243,11 @@ class Blend(Dataset):
                             for index in range(len(d[dataset_type][gender][op]["A"])):
                                 for single in ["A", "B"]:
 
-                                    ecg = d[dataset_type][gender][op][single][index].T
+                                    ecg = d[dataset_type][gender][op][single][index].T[0]
 
-                                    f, t, Zxx = sg.stft(ecg, fs=100, nperseg=512,
-                                                        noverlap=512 - 1)
+                                    f, t, Zxx = sg.stft(ecg, fs=100, nperseg=512, noverlap=512 - 1)
                                     # f, t, Zxx = sg.stft(rec["'MLII'"][:1024], fs=360, nperseg=512, noverlap=0)
-                                    plt.pcolormesh(t, f, np.abs(Zxx), shading='gouraud')
+                                    # plt.pcolormesh(t, f, np.abs(Zxx), shading='gouraud')
 
                                     X_stft = self.STFT(sg.resample(ecg, 360000,
                                                                    np.arange(0, 1000) / 100)[0],
@@ -260,13 +259,16 @@ class Blend(Dataset):
                                     im = plt.pcolormesh(tau, freqs, np.fft.fftshift(np.abs(X_stft), axes=0))
 
                                     pkl_dict[dataset_type][gender][op][single].append(im)
+                                    pkl_dict[dataset_type][gender][op]["Y"].append(
+                                        d[dataset_type][gender][op]["Y"][index][index % 2][0][0])
 
                                     if self.STFT_show:
                                         plt.ylabel('f [Hz]', fontsize=16)
                                         plt.xlabel('$\\tau$ [sec]', fontsize=16)
-                                        plt.title('win: ' + str(self.win) + '   hopSize: ' + str(self.hop) + '   F: ' + str(
-                                            self.F),
-                                                  fontsize=16)
+                                        plt.title(
+                                            'win: ' + str(self.win) + '   hopSize: ' + str(self.hop) + '   F: ' + str(
+                                                self.F),
+                                            fontsize=16)
                                         plt.colorbar(im)
                                         plt.suptitle('| STFT(f, $\\tau$) |', fontsize=16)
                                         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
