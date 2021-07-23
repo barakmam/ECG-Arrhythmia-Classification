@@ -16,7 +16,8 @@ class Blend(Dataset):
         data = self.load()
         self.pre_load_pkl_data = False
         self.permutations_pkl_file_relative_path = "./data/pkl/permutation_data.pickle"
-        self.STFT_pkl_file_relative_path = "./data/pkl/STFT_data.pickle"
+        self.STFT_train_pkl_file_relative_path = "./data/pkl/STFT_train_data.pickle"
+        self.STFT_test_pkl_file_relative_path = "./data/pkl/STFT_test_data.pickle"
         self.X_train = data["X_train"]
         self.X_train_meta = data["X_train_meta"]
         self.y_train = data["y_train"]
@@ -107,6 +108,8 @@ class Blend(Dataset):
         self.age_th = 50
 
         # STFT
+        self.STFT_gender = 0
+        self.STFT_op = "<"
         self.hop = 1
         self.win = 1024
         self.F = 512
@@ -128,7 +131,7 @@ class Blend(Dataset):
 
         return a, b
 
-    def feature_label_selection(self, d, gender, op, mask_below, mask_above, dataset_type):
+    def feature_label_selection(self, d, gender, op, dataset_type):
         """
         extract the relevant features and lables both for train and predict
         """
@@ -137,6 +140,9 @@ class Blend(Dataset):
         X_meta = self.X_train_meta if dataset_type == "train" else self.X_test_meta
         Y = self.y_train if dataset_type == "train" else self.y_test
 
+        mask_below = np.array(list(range(len(X)))) < len(X) // 2
+        mask_above = list(reversed(mask_below))
+
         mask_A = np.isin(X_meta["sex"], gender) & self.custom_operator(
             X_meta["age"], self.age_th, op) & mask_below
 
@@ -144,11 +150,11 @@ class Blend(Dataset):
             X_meta["age"], self.age_th, op) & mask_above
 
         # features
-        d[gender][op]["A"] = X[mask_A]
-        d[gender][op]["meta_A"] = pd.DataFrame(X_meta)[mask_A].to_dict('records')
+        d[dataset_type][gender][op]["A"] = X[mask_A]
+        d[dataset_type][gender][op]["meta_A"] = pd.DataFrame(X_meta)[mask_A].to_dict('records')
 
-        d[gender][op]["B"] = X[mask_B]
-        d[gender][op]["meta_B"] = pd.DataFrame(X_meta)[mask_B].to_dict('records')
+        d[dataset_type][gender][op]["B"] = X[mask_B]
+        d[dataset_type][gender][op]["meta_B"] = pd.DataFrame(X_meta)[mask_B].to_dict('records')
 
         # labels
         a = Y[
@@ -171,14 +177,10 @@ class Blend(Dataset):
 
         d = copy.deepcopy(self.d)
 
-        mask_below = np.array(list(range(len(self.X_train)))) < len(self.X_train) // 2
-        mask_above = list(reversed(mask_below))
-
         for dataset_type in self.dataset_types:
             for gender in self.genders:
                 for op in self.ops:
-                    a, b = self.feature_label_selection(d=d, gender=gender, op=op, mask_below=mask_below,
-                                                        mask_above=mask_above, dataset_type=dataset_type)
+                    a, b = self.feature_label_selection(d=d, gender=gender, op=op, dataset_type=dataset_type)
 
                     # trancate
                     a, b = self.trancate(a, b)
@@ -218,25 +220,28 @@ class Blend(Dataset):
             stft = np.stack(stft).T
             return stft
 
-        d = copy.deepcopy(self.d)
-        f, t, Zxx = sg.stft(X_train[7, :, 0], fs=100, nperseg=512, noverlap=512 - 1)
-        # f, t, Zxx = sg.stft(rec["'MLII'"][:1024], fs=360, nperseg=512, noverlap=0)
-        plt.pcolormesh(t, f, np.abs(Zxx), shading='gouraud')
+        for dataset_type in self.dataset_types:
+            d = d[dataset_type]
 
-        X_stft = STFT(sg.resample(X_train[0, :, 0], 360000, np.arange(0, 1000) / 100)[0], win, hop, F,
-                      self.sample_rate * self.resample_rate / 1000)
+            f, t, Zxx = sg.stft(d[self.STFT_gender][self.STFT_op][7, :, 0], fs=100, nperseg=512, noverlap=512 - 1)
+            # f, t, Zxx = sg.stft(rec["'MLII'"][:1024], fs=360, nperseg=512, noverlap=0)
+            plt.pcolormesh(t, f, np.abs(Zxx), shading='gouraud')
 
-        tau = np.arange(X_stft.shape[1]) * hop / self.sample_rate
-        freqs = np.fft.fftshift(np.fft.fftfreq(F, 1 / self.sample_rate))
-        im = plt.pcolormesh(tau, freqs, np.fft.fftshift(np.abs(X_stft), axes=0))
-        plt.ylabel('f [Hz]', fontsize=16)
-        plt.xlabel('$\\tau$ [sec]', fontsize=16)
-        plt.title('win: ' + str(win) + '   hopSize: ' + str(hop) + '   F: ' + str(F), fontsize=16)
-        plt.colorbar(im)
-        plt.suptitle('| STFT(f, $\\tau$) |', fontsize=16)
-        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+            X_stft = STFT(sg.resample(d[self.STFT_gender][self.STFT_op][0, :, 0], 360000, np.arange(0, 1000) / 100)[0],
+                          self.win, self.hop, self.F,
+                          self.sample_rate * self.resample_rate / 1000)
 
-        return d
+            tau = np.arange(X_stft.shape[1]) * self.hop / self.sample_rate
+            freqs = np.fft.fftshift(np.fft.fftfreq(self.F, 1 / self.sample_rate))
+            im = plt.pcolormesh(tau, freqs, np.fft.fftshift(np.abs(X_stft), axes=0))
+            plt.ylabel('f [Hz]', fontsize=16)
+            plt.xlabel('$\\tau$ [sec]', fontsize=16)
+            plt.title('win: ' + str(self.win) + '   hopSize: ' + str(self.hop) + '   F: ' + str(self.F), fontsize=16)
+            plt.colorbar(im)
+            plt.suptitle('| STFT(f, $\\tau$) |', fontsize=16)
+            plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+            plt.show()
+            a = 1
 
     def permutate_and_pkl(self, d):
         """
@@ -318,6 +323,6 @@ class Blend(Dataset):
 if __name__ == "__main__":
     b = Blend()
     pairs = b.find_pairs()
-    pairs = b.STFT_and_pkl(pairs)
+    b.STFT_and_pkl(pairs)
     # pairs = b.permutate_and_pkl(pairs)
     b.blend_and_plot_ecg(pairs, 0)
