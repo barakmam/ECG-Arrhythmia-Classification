@@ -14,6 +14,7 @@ class Blend(Dataset):
     def __init__(self):
         super().__init__()
         data = self.load()
+        self.DEBUG = True
         self.pre_load_pkl_data = False
         self.X_train = data["X_train"]
         self.X_train_meta = data["X_train_meta"]
@@ -31,14 +32,16 @@ class Blend(Dataset):
                         "B": [],
                         "meta_A": [],
                         "meta_B": [],
-                        "Y": []
+                        "Y_A": [],
+                        "Y_B": []
                     },
                     '>=': {  # over 50
                         "A": [],
                         "B": [],
                         "meta_A": [],
                         "meta_B": [],
-                        "Y": []
+                        "Y_A": [],
+                        "Y_B": []
                     }
 
                 },
@@ -48,14 +51,16 @@ class Blend(Dataset):
                         "B": [],
                         "meta_A": [],
                         "meta_B": [],
-                        "Y": []
+                        "Y_A": [],
+                        "Y_B": []
                     },
                     '>=': {  # over 50
                         "A": [],
                         "B": [],
                         "meta_A": [],
                         "meta_B": [],
-                        "Y": []
+                        "Y_A": [],
+                        "Y_B": []
                     }
                 }
             },
@@ -66,14 +71,16 @@ class Blend(Dataset):
                         "B": [],
                         "meta_A": [],
                         "meta_B": [],
-                        "Y": []
+                        "Y_A": [],
+                        "Y_B": []
                     },
                     '>=': {  # over 50
                         "A": [],
                         "B": [],
                         "meta_A": [],
                         "meta_B": [],
-                        "Y": []
+                        "Y_A": [],
+                        "Y_B": []
                     }
 
                 },
@@ -83,14 +90,16 @@ class Blend(Dataset):
                         "B": [],
                         "meta_A": [],
                         "meta_B": [],
-                        "Y": []
+                        "Y_A": [],
+                        "Y_B": []
                     },
                     '>=': {  # over 50
                         "A": [],
                         "B": [],
                         "meta_A": [],
                         "meta_B": [],
-                        "Y": []
+                        "Y_A": [],
+                        "Y_B": []
                     }
                 }
 
@@ -108,10 +117,10 @@ class Blend(Dataset):
         self.STFT_show = True
         self.STFT_gender = 0
         self.STFT_op = "<"
-        self.hop = 1
+        self.hop = 10000
         self.win = 1024
         self.F = 512
-        self.resample_rate = 360000
+        self.resample_rate = 3600
         self.sample_rate = 100
 
     def custom_operator(self, a, b, op):
@@ -183,7 +192,7 @@ class Blend(Dataset):
                     # trancate
                     a, b = self.trancate(a, b)
 
-                    d[dataset_type][gender][op]["Y"] = [np.vstack((a, b))]
+                    d[dataset_type][gender][op]["Y_A"], d[dataset_type][gender][op]["Y_B"] = a, b
                     d[dataset_type][gender][op]["A"], d[dataset_type][gender][op]["B"] = self.trancate(
                         d[dataset_type][gender][op]["A"], d[dataset_type][gender][op]["B"])
                     d[dataset_type][gender][op]["meta_A"], d[dataset_type][gender][op]["meta_B"] = self.trancate(
@@ -209,6 +218,9 @@ class Blend(Dataset):
             stft.append(np.abs(currDFT).astype(np.complex64))
             startIdx += hopSize
 
+            if self.DEBUG and startIdx + len(win) > len(signal):
+                print("iteration:True".format())
+
         stft = np.stack(stft).T
         return stft
 
@@ -227,17 +239,19 @@ class Blend(Dataset):
                         if state == "permutation":
                             for r, idx in zip(
                                     itertools.product(d[dataset_type][gender][op]["A"],
-                                                      d[dataset_type][gender][op]["B"],
-                                                      d[dataset_type][gender][op]["Y"]),
+                                                      d[dataset_type][gender][op]["B"]),
                                     [a for a in itertools.product(*[range(len(x)) for x in
                                                                     [d[dataset_type][gender][op]["A"],
-                                                                     d[dataset_type][gender][op]["B"],
-                                                                     d[dataset_type][gender][op]["Y"]]])]):
-                                pkl_dict[gender][op]["A"].append(r[0])
-                                pkl_dict[gender][op]["meta_A"].append(d[gender][op]["meta_A"][idx[0]])
-                                pkl_dict[gender][op]["B"].append(r[1])
-                                pkl_dict[gender][op]["meta_B"].append(d[gender][op]["meta_B"][idx[1]])
-                                pkl_dict[gender][op]["Y"].append(r[2])
+                                                                     d[dataset_type][gender][op]["B"]]])]):
+
+                                for idx_single, single in enumerate(["A", "B"]):
+                                    pkl_dict[dataset_type][gender][op][single].append(r[idx_single])
+                                    pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
+                                        d[gender][op][f"meta_{single}"][idx[idx_single]])
+                                    pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(
+                                        d[gender][op][f"Y_{single}"][idx[idx_single]])
+
+
                         elif state == "STFT":
 
                             for index in range(len(d[dataset_type][gender][op]["A"])):
@@ -258,12 +272,15 @@ class Blend(Dataset):
                                     freqs = np.fft.fftshift(np.fft.fftfreq(self.F, 1 / self.sample_rate))
                                     im = plt.pcolormesh(tau, freqs, np.fft.fftshift(np.abs(X_stft), axes=0))
 
-
-                                    #create the dataset
+                                    # create the dataset
                                     pkl_dict[dataset_type][gender][op][single].append(im)
-                                    pkl_dict[gender][op]["meta_A"].append(d[gender][op][f"meta_{single}"][index])
-                                    pkl_dict[dataset_type][gender][op]["Y"].append(
-                                        d[dataset_type][gender][op]["Y"][index][index % 2][0][0])
+                                    pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
+                                        d[dataset_type][gender][op][f"meta_{single}"][index])
+
+
+                                    #TODO: problem with loading the index in the label
+                                    pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(
+                                        d[dataset_type][gender][op][f"Y_{single}"][index])
 
                                     if self.STFT_show:
                                         plt.ylabel('f [Hz]', fontsize=16)
@@ -319,8 +336,8 @@ class Blend(Dataset):
         meta_A = gender[op]["meta_A"][index]
         B = gender[op]["B"][index].T
         meta_B = gender[op]["meta_B"][index]
-        Y_A = gender[op]["Y"][index][0][0][0]
-        Y_B = gender[op]["Y"][index][1][0][0]
+        Y_A = gender[op]["Y_A"][index]
+        Y_B = gender[op]["Y_B"][index]
 
         ecg_plot.plot(A, sample_rate=100, title="{}-{}-{}-{}".format(meta_A, gender_str, op_str, Y_A), columns=1)
         ecg_plot.plot(B, sample_rate=100, title="{}-{}-{}-{}".format(meta_B, gender_str, op_str, Y_B), columns=1)
@@ -336,4 +353,4 @@ if __name__ == "__main__":
     b = Blend()
     pairs = b.find_pairs()
     pairs = b.pkl(pairs, state="STFT")  # expected {STFT,permutation}
-    b.blend_and_plot_ecg(pairs, 0)
+    # b.blend_and_plot_ecg(pairs, 0)
