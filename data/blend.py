@@ -224,7 +224,7 @@ class Blend(Dataset):
             for dataset_type in self.dataset_types:
                 for gender in self.genders:
                     for op in self.ops:
-                        if state == "permutate":
+                        if state == "permutation":
                             for r, idx in zip(
                                     itertools.product(d[dataset_type][gender][op]["A"],
                                                       d[dataset_type][gender][op]["B"],
@@ -258,7 +258,10 @@ class Blend(Dataset):
                                     freqs = np.fft.fftshift(np.fft.fftfreq(self.F, 1 / self.sample_rate))
                                     im = plt.pcolormesh(tau, freqs, np.fft.fftshift(np.abs(X_stft), axes=0))
 
+
+                                    #create the dataset
                                     pkl_dict[dataset_type][gender][op][single].append(im)
+                                    pkl_dict[gender][op]["meta_A"].append(d[gender][op][f"meta_{single}"][index])
                                     pkl_dict[dataset_type][gender][op]["Y"].append(
                                         d[dataset_type][gender][op]["Y"][index][index % 2][0][0])
 
@@ -332,5 +335,5 @@ class Blend(Dataset):
 if __name__ == "__main__":
     b = Blend()
     pairs = b.find_pairs()
-    pairs = b.pkl(pairs, state="STFT")
+    pairs = b.pkl(pairs, state="STFT")  # expected {STFT,permutation}
     b.blend_and_plot_ecg(pairs, 0)
