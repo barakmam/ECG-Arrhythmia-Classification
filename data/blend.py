@@ -4,6 +4,10 @@ import numpy as np
 import itertools
 import pickle
 import pandas as pd
+import scipy.signal as sg
+import matplotlib.pyplot as plt
+import copy
+
 
 ##
 class Blend(Dataset):
@@ -11,7 +15,9 @@ class Blend(Dataset):
         super().__init__()
         data = self.load()
         self.pre_load_pkl_data = False
-        self.pkl_file_relative_path = "./data/pkl/data.pickle"
+        self.permutations_pkl_file_relative_path = "./data/pkl/permutation_data.pickle"
+        self.STFT_train_pkl_file_relative_path = "./data/pkl/STFT_train_data.pickle"
+        self.STFT_test_pkl_file_relative_path = "./data/pkl/STFT_test_data.pickle"
         self.X_train = data["X_train"]
         self.X_train_meta = data["X_train_meta"]
         self.y_train = data["y_train"]
@@ -19,11 +25,96 @@ class Blend(Dataset):
         self.X_test_meta = data["X_test_meta"]
         self.y_test = data["y_test"]
 
-        self.coeff_A = 0.5 # <-- how much does A effect the blending
-        self.coeff_B = 0.5 # <-- how much does B effect the blending
+        # datasttruct
+        self.d = {
+            "train": {
+                0: {  # male
+                    '<': {  # less than 50
+                        "A": [],
+                        "B": [],
+                        "meta_A": [],
+                        "meta_B": [],
+                        "Y": []
+                    },
+                    '>=': {  # over 50
+                        "A": [],
+                        "B": [],
+                        "meta_A": [],
+                        "meta_B": [],
+                        "Y": []
+                    }
+
+                },
+                1: {  # female
+                    '<': {  # less than 50
+                        "A": [],
+                        "B": [],
+                        "meta_A": [],
+                        "meta_B": [],
+                        "Y": []
+                    },
+                    '>=': {  # over 50
+                        "A": [],
+                        "B": [],
+                        "meta_A": [],
+                        "meta_B": [],
+                        "Y": []
+                    }
+                }
+            },
+            "test": {
+                0: {  # male
+                    '<': {  # less than 50
+                        "A": [],
+                        "B": [],
+                        "meta_A": [],
+                        "meta_B": [],
+                        "Y": []
+                    },
+                    '>=': {  # over 50
+                        "A": [],
+                        "B": [],
+                        "meta_A": [],
+                        "meta_B": [],
+                        "Y": []
+                    }
+
+                },
+                1: {  # female
+                    '<': {  # less than 50
+                        "A": [],
+                        "B": [],
+                        "meta_A": [],
+                        "meta_B": [],
+                        "Y": []
+                    },
+                    '>=': {  # over 50
+                        "A": [],
+                        "B": [],
+                        "meta_A": [],
+                        "meta_B": [],
+                        "Y": []
+                    }
+                }
+
+            }
+        }
+
+        self.coeff_A = 0.5  # <-- how much does A effect the blending
+        self.coeff_B = 0.5  # <-- how much does B effect the blending
+        self.dataset_types = ["train", "test"]
         self.genders = [0, 1]
         self.ops = ["<", ">="]
         self.age_th = 50
+
+        # STFT
+        self.STFT_gender = 0
+        self.STFT_op = "<"
+        self.hop = 1
+        self.win = 1024
+        self.F = 512
+        self.resample_rate = 360000
+        self.sample_rate = 100
 
     def custom_operator(self, a, b, op):
         if op == "<":
@@ -40,6 +131,43 @@ class Blend(Dataset):
 
         return a, b
 
+    def feature_label_selection(self, d, gender, op, dataset_type):
+        """
+        extract the relevant features and lables both for train and predict
+        """
+
+        X = self.X_train if dataset_type == "train" else self.X_test
+        X_meta = self.X_train_meta if dataset_type == "train" else self.X_test_meta
+        Y = self.y_train if dataset_type == "train" else self.y_test
+
+        mask_below = np.array(list(range(len(X)))) < len(X) // 2
+        mask_above = list(reversed(mask_below))
+
+        mask_A = np.isin(X_meta["sex"], gender) & self.custom_operator(
+            X_meta["age"], self.age_th, op) & mask_below
+
+        mask_B = np.isin(X_meta["sex"], gender) & self.custom_operator(
+            X_meta["age"], self.age_th, op) & mask_above
+
+        # features
+        d[dataset_type][gender][op]["A"] = X[mask_A]
+        d[dataset_type][gender][op]["meta_A"] = pd.DataFrame(X_meta)[mask_A].to_dict('records')
+
+        d[dataset_type][gender][op]["B"] = X[mask_B]
+        d[dataset_type][gender][op]["meta_B"] = pd.DataFrame(X_meta)[mask_B].to_dict('records')
+
+        # labels
+        a = Y[
+            np.isin(X_meta["sex"], gender) & self.custom_operator(X_meta["age"],
+                                                                  self.age_th,
+                                                                  op) & mask_below]
+        b = Y[
+            np.isin(X_meta["sex"], gender) & self.custom_operator(X_meta["age"],
+                                                                  self.age_th,
+                                                                  op) & mask_above]
+
+        return a, b
+
     def find_pairs(self):
         """
         pairs male with the same age(under/above 50)
@@ -47,79 +175,73 @@ class Blend(Dataset):
         :return:
         """
 
-        d = {
-            0: {  # male
-                '<': {  # less than 50
-                    "A": [],
-                    "B": [],
-                    "meta_A": [],
-                    "meta_B": [],
-                    "Y": []
-                },
-                '>=': {  # over 50
-                    "A": [],
-                    "B": [],
-                    "meta_A": [],
-                    "meta_B": [],
-                    "Y": []
-                }
+        d = copy.deepcopy(self.d)
 
-            },
-            1: {  # female
-                '<': {  # less than 50
-                    "A": [],
-                    "B": [],
-                    "meta_A": [],
-                    "meta_B": [],
-                    "Y": []
-                },
-                '>=': {  # over 50
-                    "A": [],
-                    "B": [],
-                    "meta_A": [],
-                    "meta_B": [],
-                    "Y": []
-                }
-            }
-        }
+        for dataset_type in self.dataset_types:
+            for gender in self.genders:
+                for op in self.ops:
+                    a, b = self.feature_label_selection(d=d, gender=gender, op=op, dataset_type=dataset_type)
 
-        mask_below = np.array(list(range(len(self.X_train)))) < len(self.X_train) // 2
-        mask_above = list(reversed(mask_below))
+                    # trancate
+                    a, b = self.trancate(a, b)
 
-        for gender in self.genders:
-            for op in self.ops:
-                mask_A = np.isin(self.X_train_meta["sex"], gender) & self.custom_operator(
-                    self.X_train_meta["age"], self.age_th, op) & mask_below
-
-                mask_B = np.isin(self.X_train_meta["sex"], gender) & self.custom_operator(
-                    self.X_train_meta["age"], self.age_th, op) & mask_above
-
-                # features
-                d[gender][op]["A"] = self.X_train[mask_A]
-                d[gender][op]["meta_A"] = pd.DataFrame(self.X_train_meta)[mask_A].to_dict('records')
-
-                d[gender][op]["B"] = self.X_train[mask_B]
-                d[gender][op]["meta_B"] = pd.DataFrame(self.X_train_meta)[mask_B].to_dict('records')
-
-                # labels
-                a = self.y_train[
-                    np.isin(self.X_train_meta["sex"], gender) & self.custom_operator(self.X_train_meta["age"],
-                                                                                     self.age_th,
-                                                                                     op) & mask_below]
-                b = self.y_train[
-                    np.isin(self.X_train_meta["sex"], gender) & self.custom_operator(self.X_train_meta["age"],
-                                                                                     self.age_th,
-                                                                                     op) & mask_above]
-
-                # trancate
-                a, b = self.trancate(a, b)
-
-                d[gender][op]["Y"] = [np.vstack((a, b))]
-                d[gender][op]["A"], d[gender][op]["B"] = self.trancate(d[gender][op]["A"], d[gender][op]["B"])
-                d[gender][op]["meta_A"], d[gender][op]["meta_B"] = self.trancate(d[gender][op]["meta_A"],
-                                                                                 d[gender][op]["meta_B"])
+                    d[dataset_type][gender][op]["Y"] = [np.vstack((a, b))]
+                    d[dataset_type][gender][op]["A"], d[dataset_type][gender][op]["B"] = self.trancate(
+                        d[dataset_type][gender][op]["A"], d[dataset_type][gender][op]["B"])
+                    d[dataset_type][gender][op]["meta_A"], d[dataset_type][gender][op]["meta_B"] = self.trancate(
+                        d[dataset_type][gender][op]["meta_A"],
+                        d[dataset_type][gender][op]["meta_B"])
 
         return d
+
+    def STFT_and_pkl(self, d):
+        """
+        Create a pkl file which contains the STFT of the following groups {male,female},{<,>=}
+        :param d: a dict containing the {male,female},{<,>=},{A,B,Y}
+        :return: None
+        """
+
+        def STFT(signal, win, hopSize, F, Fs):
+            if not hasattr(win, "__len__"):
+                win = np.hamming(win)
+            if not hasattr(F, "__len__"):
+                F = 2 * np.pi * np.arange(F) / F
+
+            t = np.arange(len(signal))
+
+            stft = []
+            startIdx = 0
+            while startIdx + len(win) <= len(signal):
+                e = np.exp(-1j * t[startIdx:(startIdx + len(win))].reshape(1, -1) * F.reshape(-1, 1))
+                currDFT = np.sum(signal[startIdx:(startIdx + len(win))] * win * e, 1)
+                stft.append(np.abs(currDFT).astype(np.complex64))
+                startIdx += hopSize
+
+            stft = np.stack(stft).T
+            return stft
+
+        for dataset_type in self.dataset_types:
+            d = d[dataset_type]
+
+            f, t, Zxx = sg.stft(d[self.STFT_gender][self.STFT_op][7, :, 0], fs=100, nperseg=512, noverlap=512 - 1)
+            # f, t, Zxx = sg.stft(rec["'MLII'"][:1024], fs=360, nperseg=512, noverlap=0)
+            plt.pcolormesh(t, f, np.abs(Zxx), shading='gouraud')
+
+            X_stft = STFT(sg.resample(d[self.STFT_gender][self.STFT_op][0, :, 0], 360000, np.arange(0, 1000) / 100)[0],
+                          self.win, self.hop, self.F,
+                          self.sample_rate * self.resample_rate / 1000)
+
+            tau = np.arange(X_stft.shape[1]) * self.hop / self.sample_rate
+            freqs = np.fft.fftshift(np.fft.fftfreq(self.F, 1 / self.sample_rate))
+            im = plt.pcolormesh(tau, freqs, np.fft.fftshift(np.abs(X_stft), axes=0))
+            plt.ylabel('f [Hz]', fontsize=16)
+            plt.xlabel('$\\tau$ [sec]', fontsize=16)
+            plt.title('win: ' + str(self.win) + '   hopSize: ' + str(self.hop) + '   F: ' + str(self.F), fontsize=16)
+            plt.colorbar(im)
+            plt.suptitle('| STFT(f, $\\tau$) |', fontsize=16)
+            plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+            plt.show()
+            a = 1
 
     def permutate_and_pkl(self, d):
         """
@@ -128,64 +250,33 @@ class Blend(Dataset):
         :return: a dict containing the {male,female},{<,>=},{A,B,Y} permutated
         """
 
-        pkl_dict = {
-            0: {  # male
-                '<': {  # less than 50
-                    "A": [],
-                    "B": [],
-                    "meta_A": [],
-                    "meta_B": [],
-                    "Y": []
-                },
-                '>=': {  # over 50
-                    "A": [],
-                    "B": [],
-                    "meta_A": [],
-                    "meta_B": [],
-                    "Y": []
-                }
-
-            },
-            1: {  # female
-                '<': {  # less than 50
-                    "A": [],
-                    "B": [],
-                    "meta_A": [],
-                    "meta_B": [],
-                    "Y": []
-                },
-                '>=': {  # over 50
-                    "A": [],
-                    "B": [],
-                    "meta_A": [],
-                    "meta_B": [],
-                    "Y": []
-                }
-            }
-        }
+        pkl_dict = copy.deepcopy(self.d)
         if not self.pre_load_pkl_data:
-            for gender in self.genders:
-                for op in self.ops:
-                    for r, idx in zip(itertools.product(d[gender][op]["A"], d[gender][op]["B"], d[gender][op]["Y"]),
-                                      [a for a in itertools.product(*[range(len(x)) for x in
-                                                                      [d[gender][op]["A"], d[gender][op]["B"],
-                                                                       d[gender][op]["Y"]]])]):
-                        pkl_dict[gender][op]["A"].append(r[0])
-                        pkl_dict[gender][op]["meta_A"].append(d[gender][op]["meta_A"][idx[0]])
-                        pkl_dict[gender][op]["B"].append(r[1])
-                        pkl_dict[gender][op]["meta_B"].append(d[gender][op]["meta_B"][idx[1]])
-                        pkl_dict[gender][op]["Y"].append(r[2])
+            for dataset_type in self.dataset_types:
+                for gender in self.genders:
+                    for op in self.ops:
+                        for r, idx in zip(
+                                itertools.product(d[dataset_type][gender][op]["A"], d[dataset_type][gender][op]["B"],
+                                                  d[dataset_type][gender][op]["Y"]),
+                                [a for a in itertools.product(*[range(len(x)) for x in
+                                                                [d[dataset_type][gender][op]["A"],
+                                                                 d[dataset_type][gender][op]["B"],
+                                                                 d[dataset_type][gender][op]["Y"]]])]):
+                            pkl_dict[gender][op]["A"].append(r[0])
+                            pkl_dict[gender][op]["meta_A"].append(d[gender][op]["meta_A"][idx[0]])
+                            pkl_dict[gender][op]["B"].append(r[1])
+                            pkl_dict[gender][op]["meta_B"].append(d[gender][op]["meta_B"][idx[1]])
+                            pkl_dict[gender][op]["Y"].append(r[2])
 
-            with open(self.pkl_file_relative_path, 'wb') as handle:
+            with open(self.permutations_pkl_file_relative_path, 'wb') as handle:
                 pickle.dump(pkl_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
         else:
-            with open(self.pkl_file_relative_path, 'rb') as handle:
+            with open(self.permutations_pkl_file_relative_path, 'rb') as handle:
                 pkl_dict = pickle.load(handle)
 
         return pkl_dict
 
-
-    def blend_in_time(self,A,B):
+    def blend_in_time(self, A, B):
         """
         Blend two matricies in time
         :param A: 12x1000 ndarray
@@ -193,11 +284,12 @@ class Blend(Dataset):
         :return: C 12x1000 ndarray blended with self.coeff_A and self.coeff_B ratios
         """
 
-        a=A[0]
-        b=B[0]
+        a = A[0]
+        b = B[0]
 
         raise NotImplemented
-    def blend_and_plot_ecg(self, pairs,index):
+
+    def blend_and_plot_ecg(self, pairs, index):
         """
         Display the ecg of a selected index
         :param pairs: a dict containing the {male,female},{<,>=},{A,B,Y} permutated
@@ -221,25 +313,16 @@ class Blend(Dataset):
         ecg_plot.plot(A, sample_rate=100, title="{}-{}-{}-{}".format(meta_A, gender_str, op_str, Y_A), columns=1)
         ecg_plot.plot(B, sample_rate=100, title="{}-{}-{}-{}".format(meta_B, gender_str, op_str, Y_B), columns=1)
 
-        combine_signals(A, B)
-        #<-- this is where the blending should happen
-        #C=self.blend_in_time(A,B)
+        # <-- this is where the blending should happen
+
+        # C=self.blend_in_time(A,B)
 
         ecg_plot.show()
-
-
-def combine_signals(sig_A, sig_B):
-    a = sig_A[0]
-    b = sig_B[0]
-
-    c = a + b
-    return c
-
-
 
 
 if __name__ == "__main__":
     b = Blend()
     pairs = b.find_pairs()
-    pairs = b.permutate_and_pkl(pairs)
-    b.blend_and_plot_ecg(pairs,0)
+    b.STFT_and_pkl(pairs)
+    # pairs = b.permutate_and_pkl(pairs)
+    b.blend_and_plot_ecg(pairs, 0)
