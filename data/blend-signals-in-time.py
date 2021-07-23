@@ -11,7 +11,7 @@ class Blend(Dataset):
         super().__init__()
         data = self.load()
         self.pre_load_pkl_data = False
-        self.pkl_file_relative_path = "./data/data.pickle"
+        self.pkl_file_relative_path = "./data/pkl/data.pickle"
         self.X_train = data["X_train"]
         self.X_train_meta = data["X_train_meta"]
         self.y_train = data["y_train"]
