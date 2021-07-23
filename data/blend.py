@@ -15,9 +15,6 @@ class Blend(Dataset):
         super().__init__()
         data = self.load()
         self.pre_load_pkl_data = False
-        self.permutations_pkl_file_relative_path = "./data/pkl/permutation_data.pickle"
-        self.STFT_train_pkl_file_relative_path = "./data/pkl/STFT_train_data.pickle"
-        self.STFT_test_pkl_file_relative_path = "./data/pkl/STFT_test_data.pickle"
         self.X_train = data["X_train"]
         self.X_train_meta = data["X_train_meta"]
         self.y_train = data["y_train"]
@@ -108,6 +105,7 @@ class Blend(Dataset):
         self.age_th = 50
 
         # STFT
+        self.STFT_show=True
         self.STFT_gender = 0
         self.STFT_op = "<"
         self.hop = 1
@@ -194,56 +192,27 @@ class Blend(Dataset):
 
         return d
 
-    def STFT_and_pkl(self, d):
-        """
-        Create a pkl file which contains the STFT of the following groups {male,female},{<,>=}
-        :param d: a dict containing the {male,female},{<,>=},{A,B,Y}
-        :return: None
-        """
+    def STFT(signal, win, hopSize, F, Fs):
+        if not hasattr(win, "__len__"):
+            win = np.hamming(win)
+        if not hasattr(F, "__len__"):
+            F = 2 * np.pi * np.arange(F) / F
 
-        def STFT(signal, win, hopSize, F, Fs):
-            if not hasattr(win, "__len__"):
-                win = np.hamming(win)
-            if not hasattr(F, "__len__"):
-                F = 2 * np.pi * np.arange(F) / F
+        t = np.arange(len(signal))
 
-            t = np.arange(len(signal))
+        stft = []
+        startIdx = 0
+        while startIdx + len(win) <= len(signal):
+            e = np.exp(
+                -1j * t[startIdx:(startIdx + len(win))].reshape(1, -1) * F.reshape(-1, 1))
+            currDFT = np.sum(signal[startIdx:(startIdx + len(win))] * win * e, 1)
+            stft.append(np.abs(currDFT).astype(np.complex64))
+            startIdx += hopSize
 
-            stft = []
-            startIdx = 0
-            while startIdx + len(win) <= len(signal):
-                e = np.exp(-1j * t[startIdx:(startIdx + len(win))].reshape(1, -1) * F.reshape(-1, 1))
-                currDFT = np.sum(signal[startIdx:(startIdx + len(win))] * win * e, 1)
-                stft.append(np.abs(currDFT).astype(np.complex64))
-                startIdx += hopSize
+        stft = np.stack(stft).T
+        return stft
 
-            stft = np.stack(stft).T
-            return stft
-
-        for dataset_type in self.dataset_types:
-            d = d[dataset_type]
-
-            f, t, Zxx = sg.stft(d[self.STFT_gender][self.STFT_op][7, :, 0], fs=100, nperseg=512, noverlap=512 - 1)
-            # f, t, Zxx = sg.stft(rec["'MLII'"][:1024], fs=360, nperseg=512, noverlap=0)
-            plt.pcolormesh(t, f, np.abs(Zxx), shading='gouraud')
-
-            X_stft = STFT(sg.resample(d[self.STFT_gender][self.STFT_op][0, :, 0], 360000, np.arange(0, 1000) / 100)[0],
-                          self.win, self.hop, self.F,
-                          self.sample_rate * self.resample_rate / 1000)
-
-            tau = np.arange(X_stft.shape[1]) * self.hop / self.sample_rate
-            freqs = np.fft.fftshift(np.fft.fftfreq(self.F, 1 / self.sample_rate))
-            im = plt.pcolormesh(tau, freqs, np.fft.fftshift(np.abs(X_stft), axes=0))
-            plt.ylabel('f [Hz]', fontsize=16)
-            plt.xlabel('$\\tau$ [sec]', fontsize=16)
-            plt.title('win: ' + str(self.win) + '   hopSize: ' + str(self.hop) + '   F: ' + str(self.F), fontsize=16)
-            plt.colorbar(im)
-            plt.suptitle('| STFT(f, $\\tau$) |', fontsize=16)
-            plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-            plt.show()
-            a = 1
-
-    def permutate_and_pkl(self, d):
+    def pkl(self, d, state="STFT"):
         """
         Create a pkl file which contains the permutations of the following groups {male,female},{<,>=}
         :param d: a dict containing the {male,female},{<,>=},{A,B,Y}
@@ -255,23 +224,61 @@ class Blend(Dataset):
             for dataset_type in self.dataset_types:
                 for gender in self.genders:
                     for op in self.ops:
-                        for r, idx in zip(
-                                itertools.product(d[dataset_type][gender][op]["A"], d[dataset_type][gender][op]["B"],
-                                                  d[dataset_type][gender][op]["Y"]),
-                                [a for a in itertools.product(*[range(len(x)) for x in
-                                                                [d[dataset_type][gender][op]["A"],
-                                                                 d[dataset_type][gender][op]["B"],
-                                                                 d[dataset_type][gender][op]["Y"]]])]):
-                            pkl_dict[gender][op]["A"].append(r[0])
-                            pkl_dict[gender][op]["meta_A"].append(d[gender][op]["meta_A"][idx[0]])
-                            pkl_dict[gender][op]["B"].append(r[1])
-                            pkl_dict[gender][op]["meta_B"].append(d[gender][op]["meta_B"][idx[1]])
-                            pkl_dict[gender][op]["Y"].append(r[2])
+                        if state == "permutate":
+                            for r, idx in zip(
+                                    itertools.product(d[dataset_type][gender][op]["A"],
+                                                      d[dataset_type][gender][op]["B"],
+                                                      d[dataset_type][gender][op]["Y"]),
+                                    [a for a in itertools.product(*[range(len(x)) for x in
+                                                                    [d[dataset_type][gender][op]["A"],
+                                                                     d[dataset_type][gender][op]["B"],
+                                                                     d[dataset_type][gender][op]["Y"]]])]):
+                                pkl_dict[gender][op]["A"].append(r[0])
+                                pkl_dict[gender][op]["meta_A"].append(d[gender][op]["meta_A"][idx[0]])
+                                pkl_dict[gender][op]["B"].append(r[1])
+                                pkl_dict[gender][op]["meta_B"].append(d[gender][op]["meta_B"][idx[1]])
+                                pkl_dict[gender][op]["Y"].append(r[2])
+                        elif state == "STFT":
 
-            with open(self.permutations_pkl_file_relative_path, 'wb') as handle:
+                            for index in range(len(d[dataset_type][gender][op]["A"])):
+                                for single in ["A", "B"]:
+
+                                    ecg = d[dataset_type][gender][op][single][index].T
+
+                                    f, t, Zxx = sg.stft(ecg, fs=100, nperseg=512,
+                                                        noverlap=512 - 1)
+                                    # f, t, Zxx = sg.stft(rec["'MLII'"][:1024], fs=360, nperseg=512, noverlap=0)
+                                    plt.pcolormesh(t, f, np.abs(Zxx), shading='gouraud')
+
+                                    X_stft = self.STFT(sg.resample(ecg, 360000,
+                                                                   np.arange(0, 1000) / 100)[0],
+                                                       self.win, self.hop, self.F,
+                                                       self.sample_rate * self.resample_rate / 1000)
+
+                                    tau = np.arange(X_stft.shape[1]) * self.hop / self.sample_rate
+                                    freqs = np.fft.fftshift(np.fft.fftfreq(self.F, 1 / self.sample_rate))
+                                    im = plt.pcolormesh(tau, freqs, np.fft.fftshift(np.abs(X_stft), axes=0))
+
+                                    pkl_dict[dataset_type][gender][op][single].append(im)
+
+                                    if self.STFT_show:
+                                        plt.ylabel('f [Hz]', fontsize=16)
+                                        plt.xlabel('$\\tau$ [sec]', fontsize=16)
+                                        plt.title('win: ' + str(self.win) + '   hopSize: ' + str(self.hop) + '   F: ' + str(
+                                            self.F),
+                                                  fontsize=16)
+                                        plt.colorbar(im)
+                                        plt.suptitle('| STFT(f, $\\tau$) |', fontsize=16)
+                                        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+                                        plt.show()
+
+                        else:
+                            raise NotImplementedError
+
+            with open(f"./data/pkl/{state}_data.pickle", 'wb') as handle:
                 pickle.dump(pkl_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
         else:
-            with open(self.permutations_pkl_file_relative_path, 'rb') as handle:
+            with open(f"./data/pkl/{state}_data.pickle", 'rb') as handle:
                 pkl_dict = pickle.load(handle)
 
         return pkl_dict
@@ -323,6 +330,5 @@ class Blend(Dataset):
 if __name__ == "__main__":
     b = Blend()
     pairs = b.find_pairs()
-    b.STFT_and_pkl(pairs)
-    # pairs = b.permutate_and_pkl(pairs)
+    pairs = b.pkl(pairs, state="STFT")
     b.blend_and_plot_ecg(pairs, 0)
