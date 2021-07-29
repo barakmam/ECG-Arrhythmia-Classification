@@ -10,3 +10,7 @@ kaggle: https://www.kaggle.com/shayanfazeli/heartbeat
 Overleaf:
 https://www.overleaf.com/4713153523cdsbvhfmxnjm
 
+
+normalizing flow
+diffusion model
+

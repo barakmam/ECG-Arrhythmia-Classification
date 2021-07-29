@@ -4,7 +4,7 @@ import numpy as np
 import itertools
 import pickle
 import pandas as pd
-
+import matplotlib.pyplot as plt
 
 class Blend(Dataset):
     def __init__(self):
