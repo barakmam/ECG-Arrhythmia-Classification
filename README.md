@@ -21,3 +21,6 @@ https://pypi.org/project/ecg-plot/
 dataset:
 https://physionet.org/content/ptb-xl/1.0.1/
 
+bucket:
+https://console.cloud.google.com/storage/browser?project=model-azimuth-321409&prefix=
+

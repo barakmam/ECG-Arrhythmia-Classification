@@ -28,7 +28,7 @@ class Blend(Dataset):
         self.X_test = data["X_test"]
         self.X_test_meta = data["X_test_meta"]
         self.y_test = data["y_test"]
-        self.push_to_gcs=False
+        self.push_to_gcs=True
 
         # datasttruct
         self.d = {
@@ -123,7 +123,7 @@ class Blend(Dataset):
         self.age_th = 50
 
         # STFT
-        self.STFT_show = True
+        self.STFT_show = False
         self.STFT_gender = 0
         self.STFT_op = "<"
         self.hop = 10000
