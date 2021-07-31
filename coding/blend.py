@@ -22,7 +22,6 @@ class Blend(Dataset):
         super().__init__()
         data = self.load()
         self.DEBUG = False
-        self.pre_load_bucket_data = False
         self.X_train = data["X_train"]
         self.X_train_meta = data["X_train_meta"]
         self.y_train = data["y_train"]
@@ -114,6 +113,8 @@ class Blend(Dataset):
             }
         }
 
+
+        # Blend
         self.coeff_A = 0.5  # <-- how much does A effect the blending
         self.coeff_B = 0.5  # <-- how much does B effect the blending
         self.dataset_types = ["train", "test"]
@@ -122,7 +123,7 @@ class Blend(Dataset):
         self.age_th = 50
 
         # STFT
-        self.STFT_show = False
+        self.STFT_show = True
         self.STFT_gender = 0
         self.STFT_op = "<"
         self.hop = 10000
@@ -232,6 +233,11 @@ class Blend(Dataset):
 
         stft = np.stack(stft).T
         return stft
+
+
+    def gender_str(self, gender):
+        return 'male' if gender == 0 else 'female'
+
 
     def gcs_bucket(self, d, state="STFT"):
         """
