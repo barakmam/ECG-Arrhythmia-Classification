@@ -1,4 +1,4 @@
-from data.dataset import Dataset
+from coding.dataset import Dataset
 import ecg_plot
 import numpy as np
 import itertools
@@ -7,14 +7,21 @@ import pandas as pd
 import scipy.signal as sg
 import matplotlib.pyplot as plt
 import copy
+from google.cloud import storage
+import os.path
 
+# Setting credentials using the downloaded JSON file
+path='model-azimuth-321409-241148a4b144.json'
+if not os.path.isfile(path):
+    raise ("Please provide the gcs key in the root directory")
+client = storage.Client.from_service_account_json(json_credentials_path=path)
 
-##
 class Blend(Dataset):
     def __init__(self):
         super().__init__()
         data = self.load()
-        self.pre_load_pkl_data = False
+        self.DEBUG = False
+        self.pre_load_bucket_data = False
         self.X_train = data["X_train"]
         self.X_train_meta = data["X_train_meta"]
         self.y_train = data["y_train"]
@@ -31,14 +38,16 @@ class Blend(Dataset):
                         "B": [],
                         "meta_A": [],
                         "meta_B": [],
-                        "Y": []
+                        "Y_A": [],
+                        "Y_B": []
                     },
                     '>=': {  # over 50
                         "A": [],
                         "B": [],
                         "meta_A": [],
                         "meta_B": [],
-                        "Y": []
+                        "Y_A": [],
+                        "Y_B": []
                     }
 
                 },
@@ -48,14 +57,16 @@ class Blend(Dataset):
                         "B": [],
                         "meta_A": [],
                         "meta_B": [],
-                        "Y": []
+                        "Y_A": [],
+                        "Y_B": []
                     },
                     '>=': {  # over 50
                         "A": [],
                         "B": [],
                         "meta_A": [],
                         "meta_B": [],
-                        "Y": []
+                        "Y_A": [],
+                        "Y_B": []
                     }
                 }
             },
@@ -66,14 +77,16 @@ class Blend(Dataset):
                         "B": [],
                         "meta_A": [],
                         "meta_B": [],
-                        "Y": []
+                        "Y_A": [],
+                        "Y_B": []
                     },
                     '>=': {  # over 50
                         "A": [],
                         "B": [],
                         "meta_A": [],
                         "meta_B": [],
-                        "Y": []
+                        "Y_A": [],
+                        "Y_B": []
                     }
 
                 },
@@ -83,14 +96,16 @@ class Blend(Dataset):
                         "B": [],
                         "meta_A": [],
                         "meta_B": [],
-                        "Y": []
+                        "Y_A": [],
+                        "Y_B": []
                     },
                     '>=': {  # over 50
                         "A": [],
                         "B": [],
                         "meta_A": [],
                         "meta_B": [],
-                        "Y": []
+                        "Y_A": [],
+                        "Y_B": []
                     }
                 }
 
@@ -108,10 +123,10 @@ class Blend(Dataset):
         self.STFT_show = True
         self.STFT_gender = 0
         self.STFT_op = "<"
-        self.hop = 1
+        self.hop = 1000
         self.win = 1024
         self.F = 512
-        self.resample_rate = 360000
+        self.resample_rate = 3600
         self.sample_rate = 100
 
     def custom_operator(self, a, b, op):
@@ -183,7 +198,7 @@ class Blend(Dataset):
                     # trancate
                     a, b = self.trancate(a, b)
 
-                    d[dataset_type][gender][op]["Y"] = [np.vstack((a, b))]
+                    d[dataset_type][gender][op]["Y_A"], d[dataset_type][gender][op]["Y_B"] = a, b
                     d[dataset_type][gender][op]["A"], d[dataset_type][gender][op]["B"] = self.trancate(
                         d[dataset_type][gender][op]["A"], d[dataset_type][gender][op]["B"])
                     d[dataset_type][gender][op]["meta_A"], d[dataset_type][gender][op]["meta_B"] = self.trancate(
@@ -209,82 +224,88 @@ class Blend(Dataset):
             stft.append(np.abs(currDFT).astype(np.complex64))
             startIdx += hopSize
 
+            if self.DEBUG and startIdx + len(win) > len(signal):
+                print("iteration:True".format())
+
         stft = np.stack(stft).T
         return stft
 
-    def pkl(self, d, state="STFT"):
+    def gcs_bucket(self, d, state="STFT"):
         """
         Create a pkl file which contains the permutations of the following groups {male,female},{<,>=}
         :param d: a dict containing the {male,female},{<,>=},{A,B,Y}
         :return: a dict containing the {male,female},{<,>=},{A,B,Y} permutated
         """
 
+        # Creating bucket object
+        bucket = client.get_bucket('ecg-arrhythmia-classification')
         pkl_dict = copy.deepcopy(self.d)
-        if not self.pre_load_pkl_data:
-            for dataset_type in self.dataset_types:
-                for gender in self.genders:
-                    for op in self.ops:
-                        if state == "permutation":
-                            for r, idx in zip(
-                                    itertools.product(d[dataset_type][gender][op]["A"],
-                                                      d[dataset_type][gender][op]["B"],
-                                                      d[dataset_type][gender][op]["Y"]),
-                                    [a for a in itertools.product(*[range(len(x)) for x in
-                                                                    [d[dataset_type][gender][op]["A"],
-                                                                     d[dataset_type][gender][op]["B"],
-                                                                     d[dataset_type][gender][op]["Y"]]])]):
-                                pkl_dict[gender][op]["A"].append(r[0])
-                                pkl_dict[gender][op]["meta_A"].append(d[gender][op]["meta_A"][idx[0]])
-                                pkl_dict[gender][op]["B"].append(r[1])
-                                pkl_dict[gender][op]["meta_B"].append(d[gender][op]["meta_B"][idx[1]])
-                                pkl_dict[gender][op]["Y"].append(r[2])
-                        elif state == "STFT":
 
-                            for index in range(len(d[dataset_type][gender][op]["A"])):
-                                for single in ["A", "B"]:
+        for dataset_type in self.dataset_types:
+            for gender in self.genders:
+                for op in self.ops:
+                    if state == "permutation":
+                        for r, idx in zip(
+                                itertools.product(d[dataset_type][gender][op]["A"],
+                                                  d[dataset_type][gender][op]["B"]),
+                                [a for a in itertools.product(*[range(len(x)) for x in
+                                                                [d[dataset_type][gender][op]["A"],
+                                                                 d[dataset_type][gender][op]["B"]]])]):
 
-                                    ecg = d[dataset_type][gender][op][single][index].T[0]
-
-                                    f, t, Zxx = sg.stft(ecg, fs=100, nperseg=512, noverlap=512 - 1)
-                                    # f, t, Zxx = sg.stft(rec["'MLII'"][:1024], fs=360, nperseg=512, noverlap=0)
-                                    # plt.pcolormesh(t, f, np.abs(Zxx), shading='gouraud')
-
-                                    X_stft = self.STFT(sg.resample(ecg, 360000,
-                                                                   np.arange(0, 1000) / 100)[0],
-                                                       self.win, self.hop, self.F,
-                                                       self.sample_rate * self.resample_rate / 1000)
-
-                                    tau = np.arange(X_stft.shape[1]) * self.hop / self.sample_rate
-                                    freqs = np.fft.fftshift(np.fft.fftfreq(self.F, 1 / self.sample_rate))
-                                    im = plt.pcolormesh(tau, freqs, np.fft.fftshift(np.abs(X_stft), axes=0))
+                            for idx_single, single in enumerate(["A", "B"]):
+                                pkl_dict[dataset_type][gender][op][single].append(r[idx_single])
+                                pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
+                                    d[gender][op][f"meta_{single}"][idx[idx_single]])
+                                pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(
+                                    d[gender][op][f"Y_{single}"][idx[idx_single]])
 
 
-                                    #create the dataset
-                                    pkl_dict[dataset_type][gender][op][single].append(im)
-                                    pkl_dict[gender][op]["meta_A"].append(d[gender][op][f"meta_{single}"][index])
-                                    pkl_dict[dataset_type][gender][op]["Y"].append(
-                                        d[dataset_type][gender][op]["Y"][index][index % 2][0][0])
+                    elif state == "STFT":
 
-                                    if self.STFT_show:
-                                        plt.ylabel('f [Hz]', fontsize=16)
-                                        plt.xlabel('$\\tau$ [sec]', fontsize=16)
-                                        plt.title(
-                                            'win: ' + str(self.win) + '   hopSize: ' + str(self.hop) + '   F: ' + str(
-                                                self.F),
-                                            fontsize=16)
-                                        plt.colorbar(im)
-                                        plt.suptitle('| STFT(f, $\\tau$) |', fontsize=16)
-                                        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-                                        plt.show()
+                        for index in range(len(d[dataset_type][gender][op]["A"])):
+                            for single in ["A", "B"]:
 
-                        else:
-                            raise NotImplementedError
+                                ecg = d[dataset_type][gender][op][single][index].T[0]
 
-            with open(f"./data/pkl/{state}_data.pickle", 'wb') as handle:
-                pickle.dump(pkl_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        else:
-            with open(f"./data/pkl/{state}_data.pickle", 'rb') as handle:
-                pkl_dict = pickle.load(handle)
+                                f, t, Zxx = sg.stft(ecg, fs=100, nperseg=512, noverlap=512 - 1)
+                                # f, t, Zxx = sg.stft(rec["'MLII'"][:1024], fs=360, nperseg=512, noverlap=0)
+                                # plt.pcolormesh(t, f, np.abs(Zxx), shading='gouraud')
+
+                                X_stft = self.STFT(sg.resample(ecg, 360000,
+                                                               np.arange(0, 1000) / 100)[0],
+                                                   self.win, self.hop, self.F,
+                                                   self.sample_rate * self.resample_rate / 1000)
+
+                                tau = np.arange(X_stft.shape[1]) * self.hop / self.sample_rate
+                                freqs = np.fft.fftshift(np.fft.fftfreq(self.F, 1 / self.sample_rate))
+                                im = plt.pcolormesh(tau, freqs, np.fft.fftshift(np.abs(X_stft), axes=0))
+
+                                # create the dataset: data+metadata
+                                pkl_dict[dataset_type][gender][op][single].append(im)
+                                pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
+                                    d[dataset_type][gender][op][f"meta_{single}"][index])
+
+                                # Y
+                                y = d[dataset_type][gender][op][f"Y_{single}"].iloc[index][0]
+                                pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(y)
+
+                                if self.STFT_show:
+                                    plt.ylabel('f [Hz]', fontsize=16)
+                                    plt.xlabel('$\\tau$ [sec]', fontsize=16)
+                                    plt.title(
+                                        'win:{} , hopSize:{} , F:{}, y:{}'.format(self.win, self.hop, self.F, y),
+                                        fontsize=16)
+                                    plt.colorbar(im)
+                                    plt.suptitle('| STFT(f, $\\tau$) |', fontsize=16)
+                                    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+                                    plt.show()
+
+                    else:
+                        raise NotImplementedError
+
+        object_name_in_gcs_bucket = bucket.blob('chuck_1')
+        object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
+
 
         return pkl_dict
 
@@ -319,8 +340,8 @@ class Blend(Dataset):
         meta_A = gender[op]["meta_A"][index]
         B = gender[op]["B"][index].T
         meta_B = gender[op]["meta_B"][index]
-        Y_A = gender[op]["Y"][index][0][0][0]
-        Y_B = gender[op]["Y"][index][1][0][0]
+        Y_A = gender[op]["Y_A"][index]
+        Y_B = gender[op]["Y_B"][index]
 
         ecg_plot.plot(A, sample_rate=100, title="{}-{}-{}-{}".format(meta_A, gender_str, op_str, Y_A), columns=1)
         ecg_plot.plot(B, sample_rate=100, title="{}-{}-{}-{}".format(meta_B, gender_str, op_str, Y_B), columns=1)
@@ -335,5 +356,5 @@ class Blend(Dataset):
 if __name__ == "__main__":
     b = Blend()
     pairs = b.find_pairs()
-    pairs = b.pkl(pairs, state="STFT")  # expected {STFT,permutation}
-    b.blend_and_plot_ecg(pairs, 0)
+    pairs = b.gcs_bucket(pairs, state="STFT")  # expected {STFT,permutation}
+    # b.blend_and_plot_ecg(pairs, 0)

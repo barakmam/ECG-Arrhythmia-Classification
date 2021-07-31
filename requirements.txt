@@ -1,3 +1,5 @@
 ecg_plot
 scipy
 pandas
+pydrive
+google-cloud-storage
