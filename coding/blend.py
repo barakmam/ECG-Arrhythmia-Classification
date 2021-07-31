@@ -134,7 +134,6 @@ class Blend(Dataset):
         self.F = 512
         self.resample_rate = 3600
         self.sample_rate = 100
-        self.chunck_size = 2
 
     def custom_operator(self, a, b, op):
         if op == "<":
