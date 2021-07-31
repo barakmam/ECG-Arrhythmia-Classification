@@ -11,10 +11,11 @@ from google.cloud import storage
 import os.path
 
 # Setting credentials using the downloaded JSON file
-path='model-azimuth-321409-241148a4b144.json'
+path = 'model-azimuth-321409-241148a4b144.json'
 if not os.path.isfile(path):
     raise ("Please provide the gcs key in the root directory")
 client = storage.Client.from_service_account_json(json_credentials_path=path)
+
 
 class Blend(Dataset):
     def __init__(self):
@@ -28,6 +29,7 @@ class Blend(Dataset):
         self.X_test = data["X_test"]
         self.X_test_meta = data["X_test_meta"]
         self.y_test = data["y_test"]
+        self.push_to_gcs=False
 
         # datasttruct
         self.d = {
@@ -120,14 +122,15 @@ class Blend(Dataset):
         self.age_th = 50
 
         # STFT
-        self.STFT_show = True
+        self.STFT_show = False
         self.STFT_gender = 0
         self.STFT_op = "<"
-        self.hop = 1000
+        self.hop = 10000
         self.win = 1024
         self.F = 512
         self.resample_rate = 3600
         self.sample_rate = 100
+        self.chunck_size = 2
 
     def custom_operator(self, a, b, op):
         if op == "<":
@@ -230,6 +233,9 @@ class Blend(Dataset):
         stft = np.stack(stft).T
         return stft
 
+    def gender_str(self, gender):
+        return 'male' if gender == 0 else 'female'
+
     def gcs_bucket(self, d, state="STFT"):
         """
         Create a pkl file which contains the permutations of the following groups {male,female},{<,>=}
@@ -261,8 +267,12 @@ class Blend(Dataset):
 
 
                     elif state == "STFT":
+                        length = len(d[dataset_type][gender][op]["A"])
+                        print(
+                            "FROM dataset_type:{}, gender:{}, op:{}".format(dataset_type, self.gender_str(gender), op))
+                        for index in range(length):
+                            print("Now processing STFT img:{}/{} ".format(index + 1, length))
 
-                        for index in range(len(d[dataset_type][gender][op]["A"])):
                             for single in ["A", "B"]:
 
                                 ecg = d[dataset_type][gender][op][single][index].T[0]
@@ -300,12 +310,19 @@ class Blend(Dataset):
                                     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
                                     plt.show()
 
+                            if index % self.chunck_size == 0 and index != 0 and self.push_to_gcs:
+                                object_name_in_gcs_bucket = bucket.blob(
+                                    'state:{}, chunck:{}'.format(state, index // self.chunck_size))
+                                object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
+                                pkl_dict = copy.deepcopy(self.d)
+
+                        #TODO: There is an edge case here where the dataset might be a division of self.chunck_size
+                        if self.push_to_gcs:
+                            object_name_in_gcs_bucket = bucket.blob('state:{}, chunck:{}'.format(state, index // self.chunck_size + 1))
+                            object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
+
                     else:
                         raise NotImplementedError
-
-        object_name_in_gcs_bucket = bucket.blob('chuck_1')
-        object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
-
 
         return pkl_dict
 
