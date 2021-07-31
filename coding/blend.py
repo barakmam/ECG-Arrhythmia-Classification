@@ -233,14 +233,12 @@ class Blend(Dataset):
         stft = np.stack(stft).T
         return stft
 
-    def gender_str(self, gender):
-        return 'male' if gender == 0 else 'female'
-
     def gcs_bucket(self, d, state="STFT"):
         """
-        Create a pkl file which contains the permutations of the following groups {male,female},{<,>=}
+        According to the state, save a string that represent the data set.
+        It is a string that can be later converterd to a dict. It contains the following groups {male,female},{<,>=}
         :param d: a dict containing the {male,female},{<,>=},{A,B,Y}
-        :return: a dict containing the {male,female},{<,>=},{A,B,Y} permutated
+        :return: None
         """
 
         # Creating bucket object
@@ -324,8 +322,6 @@ class Blend(Dataset):
                     else:
                         raise NotImplementedError
 
-        return pkl_dict
-
     def blend_in_time(self, A, B):
         """
         Blend two matricies in time
@@ -373,5 +369,5 @@ class Blend(Dataset):
 if __name__ == "__main__":
     b = Blend()
     pairs = b.find_pairs()
-    pairs = b.gcs_bucket(pairs, state="STFT")  # expected {STFT,permutation}
+    b.gcs_bucket(pairs, state="STFT")  # expected {STFT,permutation}
     # b.blend_and_plot_ecg(pairs, 0)
