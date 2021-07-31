@@ -245,6 +245,8 @@ class Blend(Dataset):
         bucket = client.get_bucket('ecg-arrhythmia-classification')
         pkl_dict = copy.deepcopy(self.d)
 
+        print("start gcs_bucket!")
+
         for dataset_type in self.dataset_types:
             for gender in self.genders:
                 for op in self.ops:
@@ -308,19 +310,12 @@ class Blend(Dataset):
                                     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
                                     plt.show()
 
-                            if index % self.chunck_size == 0 and index != 0 and self.push_to_gcs:
-                                object_name_in_gcs_bucket = bucket.blob(
-                                    'state:{}, chunck:{}'.format(state, index // self.chunck_size))
-                                object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
-                                pkl_dict = copy.deepcopy(self.d)
-
-                        #TODO: There is an edge case here where the dataset might be a division of self.chunck_size
-                        if self.push_to_gcs:
-                            object_name_in_gcs_bucket = bucket.blob('state:{}, chunck:{}'.format(state, index // self.chunck_size + 1))
-                            object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
-
                     else:
                         raise NotImplementedError
+
+        if self.push_to_gcs:
+            object_name_in_gcs_bucket = bucket.blob('state:{}'.format(state))
+            object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
 
     def blend_in_time(self, A, B):
         """
