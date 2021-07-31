@@ -3,3 +3,4 @@ scipy
 pandas
 pydrive
 google-cloud-storage
+uuid==1.30

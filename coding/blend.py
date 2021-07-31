@@ -9,6 +9,9 @@ import matplotlib.pyplot as plt
 import copy
 from google.cloud import storage
 import os.path
+import ast
+import json
+import uuid
 
 # Setting credentials using the downloaded JSON file
 path = 'model-azimuth-321409-241148a4b144.json'
@@ -28,7 +31,7 @@ class Blend(Dataset):
         self.X_test = data["X_test"]
         self.X_test_meta = data["X_test_meta"]
         self.y_test = data["y_test"]
-        self.push_to_gcs=True
+        self.state = 'STFT'  # expected {STFT,permutation}
 
         # datasttruct
         self.d = {
@@ -112,7 +115,6 @@ class Blend(Dataset):
 
             }
         }
-
 
         # Blend
         self.coeff_A = 0.5  # <-- how much does A effect the blending
@@ -234,12 +236,10 @@ class Blend(Dataset):
         stft = np.stack(stft).T
         return stft
 
-
     def gender_str(self, gender):
         return 'male' if gender == 0 else 'female'
 
-
-    def gcs_bucket(self, d, state="STFT"):
+    def gcs_bucket(self, d):
         """
         According to the state, save a string that represent the data set.
         It is a string that can be later converterd to a dict. It contains the following groups {male,female},{<,>=}
@@ -256,7 +256,7 @@ class Blend(Dataset):
         for dataset_type in self.dataset_types:
             for gender in self.genders:
                 for op in self.ops:
-                    if state == "permutation":
+                    if self.state == "permutation":
                         for r, idx in zip(
                                 itertools.product(d[dataset_type][gender][op]["A"],
                                                   d[dataset_type][gender][op]["B"]),
@@ -272,7 +272,7 @@ class Blend(Dataset):
                                     d[gender][op][f"Y_{single}"][idx[idx_single]])
 
 
-                    elif state == "STFT":
+                    elif self.state == "STFT":
                         length = len(d[dataset_type][gender][op]["A"])
                         print(
                             "FROM dataset_type:{}, gender:{}, op:{}".format(dataset_type, self.gender_str(gender), op))
@@ -296,32 +296,57 @@ class Blend(Dataset):
                                 freqs = np.fft.fftshift(np.fft.fftfreq(self.F, 1 / self.sample_rate))
                                 im = plt.pcolormesh(tau, freqs, np.fft.fftshift(np.abs(X_stft), axes=0))
 
-                                # create the dataset: data+metadata
-                                pkl_dict[dataset_type][gender][op][single].append(im)
-                                pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
-                                    d[dataset_type][gender][op][f"meta_{single}"][index])
-
                                 # Y
                                 y = d[dataset_type][gender][op][f"Y_{single}"].iloc[index][0]
                                 pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(y)
 
+                                # create the dataset: data+metadata
+                                file_uuided = str(uuid.uuid4())
+
+
+                                plt.ylabel('f [Hz]', fontsize=16)
+                                plt.xlabel('$\\tau$ [sec]', fontsize=16)
+                                plt.title(
+                                    'win:{} , hopSize:{} , F:{}, y:{}'.format(self.win, self.hop, self.F, y),
+                                    fontsize=16)
+                                plt.colorbar(im)
+                                plt.suptitle('| STFT(f, $\\tau$) |', fontsize=16)
+                                plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+                                with open('myplot.pkl', 'wb') as fid:
+                                    pickle.dump(im, fid)
+
+                                blob = bucket.blob('{}/{}'.format(self.state, file_uuided))
+                                with open("./myplot.pkl", 'rb') as f:
+                                    blob.upload_from_file(f)
+
+                                pkl_dict[dataset_type][gender][op][single].append("STFT/"+file_uuided)
+                                pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
+                                    d[dataset_type][gender][op][f"meta_{single}"][index])
+
+
+
                                 if self.STFT_show:
-                                    plt.ylabel('f [Hz]', fontsize=16)
-                                    plt.xlabel('$\\tau$ [sec]', fontsize=16)
-                                    plt.title(
-                                        'win:{} , hopSize:{} , F:{}, y:{}'.format(self.win, self.hop, self.F, y),
-                                        fontsize=16)
-                                    plt.colorbar(im)
-                                    plt.suptitle('| STFT(f, $\\tau$) |', fontsize=16)
-                                    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
                                     plt.show()
 
                     else:
                         raise NotImplementedError
 
-        if self.push_to_gcs:
-            object_name_in_gcs_bucket = bucket.blob('state:{}'.format(state))
-            object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
+
+        object_name_in_gcs_bucket = bucket.blob('state:{}'.format(self.state))
+        object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
+
+    def load_dataset(self):
+        """
+        https://stackoverflow.com/questions/7290370/store-and-reload-matplotlib-pyplot-object
+        """
+        bucket = client.get_bucket('ecg-arrhythmia-classification')
+        blob = bucket.blob('state:{}'.format(self.state))
+        d = ast.literal_eval(blob.download_as_string().decode('utf-8'))
+
+        blob=bucket.blob("{}/{}".format(self.state,d['train'][0]['<']['A'][0]))
+        pickle.loads(blob.download_as_bytes())
+        plt.show()
+
 
     def blend_in_time(self, A, B):
         """
@@ -370,5 +395,6 @@ class Blend(Dataset):
 if __name__ == "__main__":
     b = Blend()
     pairs = b.find_pairs()
-    b.gcs_bucket(pairs, state="STFT")  # expected {STFT,permutation}
+    # b.gcs_bucket(pairs)
+    b.load_dataset()
     # b.blend_and_plot_ecg(pairs, 0)
