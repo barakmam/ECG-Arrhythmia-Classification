@@ -32,6 +32,7 @@ class Blend(Dataset):
         self.X_test_meta = data["X_test_meta"]
         self.y_test = data["y_test"]
         self.state = 'STFT'  # expected {STFT,permutation}
+        self.bucket = client.get_bucket('ecg-arrhythmia-classification')
 
         # datasttruct
         self.d = {
@@ -248,7 +249,6 @@ class Blend(Dataset):
         """
 
         # Creating bucket object
-        bucket = client.get_bucket('ecg-arrhythmia-classification')
         pkl_dict = copy.deepcopy(self.d)
 
         print("start gcs_bucket!")
@@ -332,18 +332,18 @@ class Blend(Dataset):
                         raise NotImplementedError
 
 
-        object_name_in_gcs_bucket = bucket.blob('state:{}'.format(self.state))
+        object_name_in_gcs_bucket = self.bucket.blob('state:{}'.format(self.state))
         object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
 
     def load_dataset(self):
         """
         https://stackoverflow.com/questions/7290370/store-and-reload-matplotlib-pyplot-object
         """
-        bucket = client.get_bucket('ecg-arrhythmia-classification')
-        blob = bucket.blob('state:{}'.format(self.state))
+
+        blob = self.bucket.blob('state:{}'.format(self.state))
         d = ast.literal_eval(blob.download_as_string().decode('utf-8'))
 
-        blob=bucket.blob("{}/{}".format(self.state,d['train'][0]['<']['A'][0]))
+        blob=self.bucket.blob("{}/{}".format(self.state,d['train'][0]['<']['A'][0]))
         pickle.loads(blob.download_as_bytes())
         plt.show()
 
