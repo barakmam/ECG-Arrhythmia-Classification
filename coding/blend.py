@@ -312,7 +312,7 @@ class Blend(Dataset):
                                 with open('myplot.pkl', 'wb') as fid:
                                     pickle.dump(im, fid)
 
-                                blob = self.bucket.bucket.blob('{}/{}'.format(self.state, file_uuided))
+                                blob = self.bucket.blob('{}/{}'.format(self.state, file_uuided))
                                 with open("./myplot.pkl", 'rb') as f:
                                     blob.upload_from_file(f)
 
@@ -337,7 +337,7 @@ class Blend(Dataset):
         blob = self.bucket.blob('state:{}'.format(self.state))
         d = ast.literal_eval(blob.download_as_string().decode('utf-8'))
 
-        blob = self.bucket.blob("{}/{}".format(self.state, d['train'][0]['<']['A'][0]))
+        blob = self.bucket.blob("{}".format(d['train'][0]['<']['A'][0]))
         pickle.loads(blob.download_as_bytes())
         plt.show()
 
@@ -388,6 +388,6 @@ class Blend(Dataset):
 if __name__ == "__main__":
     b = Blend()
     pairs = b.find_pairs()
-    # b.gcs_bucket(pairs)
+    b.gcs_bucket(pairs)
     b.load_dataset()
     # b.blend_and_plot_ecg(pairs, 0)
