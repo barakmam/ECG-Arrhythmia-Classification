@@ -128,7 +128,6 @@ class Blend(Dataset):
         # STFT
         self.STFT_show = False
         self.STFT_gender = 0
-        self.STFT_op = "<"
         self.hop = 10000
         self.win = 1024
         self.F = 512
@@ -302,7 +301,6 @@ class Blend(Dataset):
                                 # create the dataset: data+metadata
                                 file_uuided = str(uuid.uuid4())
 
-
                                 plt.ylabel('f [Hz]', fontsize=16)
                                 plt.xlabel('$\\tau$ [sec]', fontsize=16)
                                 plt.title(
@@ -314,22 +312,19 @@ class Blend(Dataset):
                                 with open('myplot.pkl', 'wb') as fid:
                                     pickle.dump(im, fid)
 
-                                blob = bucket.blob('{}/{}'.format(self.state, file_uuided))
+                                blob = self.bucket.bucket.blob('{}/{}'.format(self.state, file_uuided))
                                 with open("./myplot.pkl", 'rb') as f:
                                     blob.upload_from_file(f)
 
-                                pkl_dict[dataset_type][gender][op][single].append("STFT/"+file_uuided)
+                                pkl_dict[dataset_type][gender][op][single].append("STFT/" + file_uuided)
                                 pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
                                     d[dataset_type][gender][op][f"meta_{single}"][index])
-
-
 
                                 if self.STFT_show:
                                     plt.show()
 
                     else:
                         raise NotImplementedError
-
 
         object_name_in_gcs_bucket = self.bucket.blob('state:{}'.format(self.state))
         object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
@@ -342,10 +337,9 @@ class Blend(Dataset):
         blob = self.bucket.blob('state:{}'.format(self.state))
         d = ast.literal_eval(blob.download_as_string().decode('utf-8'))
 
-        blob=self.bucket.blob("{}/{}".format(self.state,d['train'][0]['<']['A'][0]))
+        blob = self.bucket.blob("{}/{}".format(self.state, d['train'][0]['<']['A'][0]))
         pickle.loads(blob.download_as_bytes())
         plt.show()
-
 
     def blend_in_time(self, A, B):
         """
