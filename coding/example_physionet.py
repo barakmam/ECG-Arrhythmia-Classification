@@ -18,7 +18,7 @@ def load_raw_data(df, sampling_rate, path):
     data = np.array([signal for signal, meta in data])
     return data
 
-path = r'C:\Users\ברק\Desktop\עיבוד אותות\ECG-Arrhythmia-Classification\dataset\ptb-xl\ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1/'
+path = r'.\dataset\ptb-xl\ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1/'
 sample_rate = 100
 
 # load and convert annotation data
@@ -73,24 +73,25 @@ def STFT(signal, win, hopSize, F, Fs):
     return stft
 #
 # f, t, Zxx = sg.stft(X_train[7, :, 0], fs=100, nperseg=512, noverlap=512-1)
-# # f, t, Zxx = sg.stft(rec["'MLII'"][:1024], fs=360, nperseg=512, noverlap=0)
+# f, t, Zxx = sg.stft(rec["'MLII'"][:1024], fs=360, nperseg=512, noverlap=0)
 # plt.pcolormesh(t, f, np.abs(Zxx), shading='gouraud')
-#
-# hop = 1
-# win = 1024
-# F = 512
-# resample_rate = 360000
+
+hop = 1
+win = 64
+F = 512
+resample_rate = 100
+X_stft = STFT(X_train[0, :, 0], win, hop, F, sample_rate)
 # X_stft = STFT(sg.resample(X_train[0, :, 0], 360000, np.arange(0, 1000)/100)[0], win, hop, F, sample_rate*resample_rate/1000)
-#
-# tau = np.arange(X_stft.shape[1])*hop/sample_rate
-# freqs = np.fft.fftshift(np.fft.fftfreq(F, 1/sample_rate))
-# im = plt.pcolormesh(tau, freqs, np.fft.fftshift(np.abs(X_stft), axes=0))
-# plt.ylabel('f [Hz]', fontsize=16)
-# plt.xlabel('$\\tau$ [sec]', fontsize=16)
-# plt.title('win: ' + str(win) + '   hopSize: ' + str(hop) + '   F: ' + str(F), fontsize=16)
-# plt.colorbar(im)
-# plt.suptitle('| STFT(f, $\\tau$) |', fontsize=16)
-# plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+tau = np.arange(X_stft.shape[1])*hop/sample_rate
+freqs = np.fft.fftshift(np.fft.fftfreq(F, 1/sample_rate))
+im = plt.pcolormesh(tau, freqs, np.fft.fftshift(np.abs(X_stft), axes=0), cmap='jet')
+plt.ylabel('f [Hz]', fontsize=16)
+plt.xlabel('$\\tau$ [sec]', fontsize=16)
+plt.title('win: ' + str(win) + '   hopSize: ' + str(hop) + '   F: ' + str(F), fontsize=16)
+plt.colorbar(im)
+plt.suptitle('| STFT(f, $\\tau$) |', fontsize=16)
+plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
 
 
