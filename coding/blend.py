@@ -126,12 +126,10 @@ class Blend(Dataset):
         self.age_th = 50
 
         # STFT
-        self.STFT_show = False
-        self.STFT_gender = 0
-        self.hop = 10000
-        self.win = 1024
-        self.F = 512
-        self.resample_rate = 3600
+        self.STFT_show = True
+        self.hop = 1
+        self.win = 128
+        self.F = 1024
         self.sample_rate = 100
 
     def custom_operator(self, a, b, op):
@@ -281,14 +279,12 @@ class Blend(Dataset):
 
                                 ecg = d[dataset_type][gender][op][single][index].T[0]
 
-                                f, t, Zxx = sg.stft(ecg, fs=100, nperseg=512, noverlap=512 - 1)
+                                # f, t, Zxx = sg.stft(ecg, fs=100, nperseg=512, noverlap=512 - 1)
                                 # f, t, Zxx = sg.stft(rec["'MLII'"][:1024], fs=360, nperseg=512, noverlap=0)
                                 # plt.pcolormesh(t, f, np.abs(Zxx), shading='gouraud')
 
-                                X_stft = self.STFT(sg.resample(ecg, 360000,
-                                                               np.arange(0, 1000) / 100)[0],
-                                                   self.win, self.hop, self.F,
-                                                   self.sample_rate * self.resample_rate / 1000)
+                                X_stft = self.STFT(ecg, self.win, self.hop, self.F, self.sample_rate)
+
 
                                 tau = np.arange(X_stft.shape[1]) * self.hop / self.sample_rate
                                 freqs = np.fft.fftshift(np.fft.fftfreq(self.F, 1 / self.sample_rate))
