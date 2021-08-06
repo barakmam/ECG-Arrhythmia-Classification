@@ -19,6 +19,15 @@ if not os.path.isfile(path):
     raise ("Please provide the gcs key in the root directory")
 client = storage.Client.from_service_account_json(json_credentials_path=path)
 
+super_classes = {
+    "CD": 0,
+    "HYP": 1,
+    "MI": 2,
+    "NORM": 3,
+    "STTC": 4
+
+}
+
 
 class Blend(Dataset):
     def __init__(self):
@@ -113,7 +122,6 @@ class Blend(Dataset):
                         "Y_B": []
                     }
                 }
-
             }
         }
 
@@ -279,40 +287,24 @@ class Blend(Dataset):
 
                                 ecg = d[dataset_type][gender][op][single][index].T[0]
 
-                                # f, t, Zxx = sg.stft(ecg, fs=100, nperseg=512, noverlap=512 - 1)
-                                # f, t, Zxx = sg.stft(rec["'MLII'"][:1024], fs=360, nperseg=512, noverlap=0)
-                                # plt.pcolormesh(t, f, np.abs(Zxx), shading='gouraud')
-
                                 X_stft = self.STFT(ecg, self.win, self.hop, self.F, self.sample_rate)
 
-
-                                tau = np.arange(X_stft.shape[1]) * self.hop / self.sample_rate
-                                freqs = np.fft.fftshift(np.fft.fftfreq(self.F, 1 / self.sample_rate))
-                                im = plt.pcolormesh(tau, freqs, np.fft.fftshift(np.abs(X_stft), axes=0))
+                                im = np.abs(X_stft)
+                                middle_y = im.shape[1] // 2
+                                plt.imsave("myplot.jpeg", im[middle_y:, :])
 
                                 # Y
                                 y = d[dataset_type][gender][op][f"Y_{single}"].iloc[index][0]
-                                pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(y)
+                                pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(super_classes[y])
 
                                 # create the dataset: data+metadata
                                 file_uuided = str(uuid.uuid4())
 
-                                plt.ylabel('f [Hz]', fontsize=16)
-                                plt.xlabel('$\\tau$ [sec]', fontsize=16)
-                                plt.title(
-                                    'win:{} , hopSize:{} , F:{}, y:{}'.format(self.win, self.hop, self.F, y),
-                                    fontsize=16)
-                                plt.colorbar(im)
-                                plt.suptitle('| STFT(f, $\\tau$) |', fontsize=16)
-                                plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-                                with open('myplot.pkl', 'wb') as fid:
-                                    pickle.dump(im, fid)
-
-                                blob = self.bucket.blob('{}/{}'.format(self.state, file_uuided))
-                                with open("./myplot.pkl", 'rb') as f:
+                                blob = self.bucket.blob('{}/{}.jpeg'.format(self.state, file_uuided))
+                                with open("./myplot.jpeg", 'rb') as f:
                                     blob.upload_from_file(f)
 
-                                pkl_dict[dataset_type][gender][op][single].append("STFT/" + file_uuided)
+                                pkl_dict[dataset_type][gender][op][single].append("STFT/" + file_uuided + ".jpeg")
                                 pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
                                     d[dataset_type][gender][op][f"meta_{single}"][index])
 
@@ -322,7 +314,7 @@ class Blend(Dataset):
                     else:
                         raise NotImplementedError
 
-        object_name_in_gcs_bucket = self.bucket.blob('state:{}'.format(self.state))
+        object_name_in_gcs_bucket = self.bucket.blob('data_map'.format(self.state))
         object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
 
     def load_dataset(self):
@@ -330,7 +322,7 @@ class Blend(Dataset):
         https://stackoverflow.com/questions/7290370/store-and-reload-matplotlib-pyplot-object
         """
 
-        blob = self.bucket.blob('state:{}'.format(self.state))
+        blob = self.bucket.blob('data_map'.format(self.state))
         d = ast.literal_eval(blob.download_as_string().decode('utf-8'))
 
         blob = self.bucket.blob("{}".format(d['train'][0]['<']['A'][0]))
