@@ -5,7 +5,7 @@ import ast
 import matplotlib.pyplot as plt
 import scipy.signal as sg
 import seaborn as sb
-
+import pandas as pd
 num_samples = 10
 
 
@@ -18,7 +18,11 @@ def load_raw_data(df, sampling_rate, path):
     data = np.array([signal for signal, meta in data])
     return data
 
-path = r'.\dataset\ptb-xl\ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1/'
+
+mit_bih_signal = pd.read_csv('dataset/mit-bih/N/100.csv')
+sig = mit_bih_signal.values[1000:(1000+10*360), 1]
+
+path = r'dataset\ptb-xl\ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1/'
 sample_rate = 100
 
 # load and convert annotation data
@@ -76,12 +80,18 @@ def STFT(signal, win, hopSize, F, Fs):
 # f, t, Zxx = sg.stft(rec["'MLII'"][:1024], fs=360, nperseg=512, noverlap=0)
 # plt.pcolormesh(t, f, np.abs(Zxx), shading='gouraud')
 
+# hop = 1
+# win = 64
+# F = 512
+# resample_rate = 100
+# X_stft = STFT(X_train[0, :, 0], win, hop, F, sample_rate)
+
+
 hop = 1
-win = 64
-F = 512
-resample_rate = 100
-X_stft = STFT(X_train[0, :, 0], win, hop, F, sample_rate)
-# X_stft = STFT(sg.resample(X_train[0, :, 0], 360000, np.arange(0, 1000)/100)[0], win, hop, F, sample_rate*resample_rate/1000)
+win = 128
+F = 1024
+sample_rate = 360
+X_stft = STFT(sig-min(sig), win, hop, F, sample_rate)
 
 tau = np.arange(X_stft.shape[1])*hop/sample_rate
 freqs = np.fft.fftshift(np.fft.fftfreq(F, 1/sample_rate))
@@ -108,7 +118,6 @@ for ii in range(X_train.shape[0]):
     plt.ylabel("$X^f(f)$", fontsize=16)
     plt.grid()
     # plt.show()
-
 
 
 
