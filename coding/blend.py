@@ -294,8 +294,12 @@ class Blend(Dataset):
                                 plt.imsave("myplot.jpeg", im[middle_y:, :])
 
                                 # Y
-                                y = d[dataset_type][gender][op][f"Y_{single}"].iloc[index][0]
-                                pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(super_classes[y])
+                                try:
+                                    y = d[dataset_type][gender][op][f"Y_{single}"].iloc[index][0]
+                                    pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(super_classes[y])
+                                except IndexError:
+                                    print("Processing STFT img:{}/{} failed due to Index error")
+                                    continue
 
                                 # create the dataset: data+metadata
                                 file_uuided = str(uuid.uuid4())
@@ -311,11 +315,12 @@ class Blend(Dataset):
                                 if self.STFT_show:
                                     plt.show()
 
+                            object_name_in_gcs_bucket = self.bucket.blob('data_map'.format(self.state))
+                            object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
                     else:
                         raise NotImplementedError
 
-        object_name_in_gcs_bucket = self.bucket.blob('data_map'.format(self.state))
-        object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
+
 
     def load_dataset(self):
         """
@@ -377,5 +382,5 @@ if __name__ == "__main__":
     b = Blend()
     pairs = b.find_pairs()
     b.gcs_bucket(pairs)
-    b.load_dataset()
+    # b.load_dataset()
     # b.blend_and_plot_ecg(pairs, 0)

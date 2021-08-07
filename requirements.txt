@@ -4,5 +4,3 @@ pandas
 pydrive
 google-cloud-storage==1.41.1
 uuid==1.30
-seaborn
-Pillow
