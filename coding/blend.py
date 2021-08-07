@@ -12,6 +12,7 @@ import os.path
 import ast
 import json
 import uuid
+import concurrent.futures
 
 # Setting credentials using the downloaded JSON file
 path = 'model-azimuth-321409-241148a4b144.json'
@@ -244,6 +245,43 @@ class Blend(Dataset):
     def gender_str(self, gender):
         return 'male' if gender == 0 else 'female'
 
+    def __write_to_data_map(self, d, dataset_type, gender, op, index, pkl_dict, length):
+        """
+        For multi-process, inject data to dict
+        :return:
+        """
+        for single in ["A", "B"]:
+
+            ecg = d[dataset_type][gender][op][single][index].T[0]
+
+            X_stft = self.STFT(ecg, self.win, self.hop, self.F, self.sample_rate)
+
+            im = np.abs(X_stft)
+            middle_y = im.shape[1] // 2
+            plt.imsave("myplot.jpeg", im[middle_y:, :])
+
+            # Y
+            try:
+                y = d[dataset_type][gender][op][f"Y_{single}"].iloc[index][0]
+                pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(super_classes[y])
+            except IndexError:
+                print("Processing STFT img:{}/{} failed due to Index error".format(index + 1, length))
+                continue
+
+            # create the dataset: data+metadata
+            file_uuided = str(uuid.uuid4())
+
+            blob = self.bucket.blob('{}/{}.jpeg'.format(self.state, file_uuided))
+            with open("./myplot.jpeg", 'rb') as f:
+                blob.upload_from_file(f)
+
+            pkl_dict[dataset_type][gender][op][single].append("STFT/" + file_uuided + ".jpeg")
+            pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
+                d[dataset_type][gender][op][f"meta_{single}"][index])
+
+            if self.STFT_show:
+                plt.show()
+
     def gcs_bucket(self, d):
         """
         According to the state, save a string that represent the data set.
@@ -254,73 +292,41 @@ class Blend(Dataset):
 
         # Creating bucket object
         pkl_dict = copy.deepcopy(self.d)
-
         print("start gcs_bucket!")
+        with concurrent.futures.ProcessPoolExecutor(max_workers=10) as executor:
 
-        for dataset_type in self.dataset_types:
-            for gender in self.genders:
-                for op in self.ops:
-                    if self.state == "permutation":
-                        for r, idx in zip(
-                                itertools.product(d[dataset_type][gender][op]["A"],
-                                                  d[dataset_type][gender][op]["B"]),
-                                [a for a in itertools.product(*[range(len(x)) for x in
-                                                                [d[dataset_type][gender][op]["A"],
-                                                                 d[dataset_type][gender][op]["B"]]])]):
+            for dataset_type in self.dataset_types:
+                for gender in self.genders:
+                    for op in self.ops:
+                        if self.state == "permutation":
+                            for r, idx in zip(
+                                    itertools.product(d[dataset_type][gender][op]["A"],
+                                                      d[dataset_type][gender][op]["B"]),
+                                    [a for a in itertools.product(*[range(len(x)) for x in
+                                                                    [d[dataset_type][gender][op]["A"],
+                                                                     d[dataset_type][gender][op]["B"]]])]):
 
-                            for idx_single, single in enumerate(["A", "B"]):
-                                pkl_dict[dataset_type][gender][op][single].append(r[idx_single])
-                                pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
-                                    d[gender][op][f"meta_{single}"][idx[idx_single]])
-                                pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(
-                                    d[gender][op][f"Y_{single}"][idx[idx_single]])
-
-
-                    elif self.state == "STFT":
-                        length = len(d[dataset_type][gender][op]["A"])
-                        print(
-                            "FROM dataset_type:{}, gender:{}, op:{}".format(dataset_type, self.gender_str(gender), op))
-                        for index in range(length):
-                            print("Now processing STFT img:{}/{} ".format(index + 1, length))
-
-                            for single in ["A", "B"]:
-
-                                ecg = d[dataset_type][gender][op][single][index].T[0]
-
-                                X_stft = self.STFT(ecg, self.win, self.hop, self.F, self.sample_rate)
-
-                                im = np.abs(X_stft)
-                                middle_y = im.shape[1] // 2
-                                plt.imsave("myplot.jpeg", im[middle_y:, :])
-
-                                # Y
-                                try:
-                                    y = d[dataset_type][gender][op][f"Y_{single}"].iloc[index][0]
-                                    pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(super_classes[y])
-                                except IndexError:
-                                    print("Processing STFT img:{}/{} failed due to Index error")
-                                    continue
-
-                                # create the dataset: data+metadata
-                                file_uuided = str(uuid.uuid4())
-
-                                blob = self.bucket.blob('{}/{}.jpeg'.format(self.state, file_uuided))
-                                with open("./myplot.jpeg", 'rb') as f:
-                                    blob.upload_from_file(f)
-
-                                pkl_dict[dataset_type][gender][op][single].append("STFT/" + file_uuided + ".jpeg")
-                                pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
-                                    d[dataset_type][gender][op][f"meta_{single}"][index])
-
-                                if self.STFT_show:
-                                    plt.show()
-
-                            object_name_in_gcs_bucket = self.bucket.blob('data_map'.format(self.state))
-                            object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
-                    else:
-                        raise NotImplementedError
+                                for idx_single, single in enumerate(["A", "B"]):
+                                    pkl_dict[dataset_type][gender][op][single].append(r[idx_single])
+                                    pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
+                                        d[gender][op][f"meta_{single}"][idx[idx_single]])
+                                    pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(
+                                        d[gender][op][f"Y_{single}"][idx[idx_single]])
 
 
+                        elif self.state == "STFT":
+                            length = len(d[dataset_type][gender][op]["A"])
+                            print(
+                                "FROM dataset_type:{}, gender:{}, op:{}".format(dataset_type, self.gender_str(gender),
+                                                                                op))
+
+                            args = (d, dataset_type, gender, op, pkl_dict, length)
+                            for index, result in enumerate(executor.map(lambda p: self.__write_to_data_map(*p), args)):
+                                print("Processed STFT img:{}/{} ".format(index + 1, length))
+                                object_name_in_gcs_bucket = self.bucket.blob('data_map'.format(self.state))
+                                object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
+                        else:
+                            raise NotImplementedError
 
     def load_dataset(self):
         """
