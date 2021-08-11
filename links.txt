@@ -11,6 +11,10 @@ Overleaf:
 https://www.overleaf.com/4713153523cdsbvhfmxnjm
 
 
+Google Cloud: https://console.cloud.google.com/storage/browser/_details/ecg-arrhythmia-classification/data_map?project=model-azimuth-321409
+data_map: https://storage.cloud.google.com/ecg-arrhythmia-classification/data_map
+
+
 normalizing flow
 diffusion model
 
