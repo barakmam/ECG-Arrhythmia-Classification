@@ -150,9 +150,9 @@ class Blend(Dataset):
     def trancate(self, a, b):
         if len(a) != len(b):
             if len(a) > len(b):
-                a = a[:-1]
+                a = a[:len(b)]
             else:
-                b = b[:-1]
+                b = b[:len(a)]
 
         return a, b
 
