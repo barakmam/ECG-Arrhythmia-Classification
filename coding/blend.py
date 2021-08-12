@@ -278,6 +278,7 @@ class Blend(Dataset):
 
 
                     elif self.state == "STFT":
+                        assert len(d[dataset_type][gender][op]["A"])==len(d[dataset_type][gender][op]["B"])
                         length = len(d[dataset_type][gender][op]["A"])
                         print(
                             "FROM dataset_type:{}, gender:{}, op:{}".format(dataset_type, self.gender_str(gender), op))
