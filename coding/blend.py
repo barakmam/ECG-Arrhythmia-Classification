@@ -210,6 +210,8 @@ class Blend(Dataset):
                     # trancate
                     a, b = self.trancate(a, b)
 
+                    assert len(a)==len(b)
+
                     d[dataset_type][gender][op]["Y_A"], d[dataset_type][gender][op]["Y_B"] = a, b
                     d[dataset_type][gender][op]["A"], d[dataset_type][gender][op]["B"] = self.trancate(
                         d[dataset_type][gender][op]["A"], d[dataset_type][gender][op]["B"])
