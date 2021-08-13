@@ -14,7 +14,7 @@ import json
 import uuid
 import cv2
 
-# Setting credentials using the downloaded JSON file
+## Setting credentials using the downloaded JSON file
 path = 'model-azimuth-321409-241148a4b144.json'
 if not os.path.isfile(path):
     raise ("Please provide the gcs key in the root directory")
@@ -150,9 +150,9 @@ class Blend(Dataset):
     def trancate(self, a, b):
         if len(a) != len(b):
             if len(a) > len(b):
-                a = a[:-1]
+                a = a[:len(b)]
             else:
-                b = b[:-1]
+                b = b[:len(a)]
 
         return a, b
 
@@ -209,6 +209,8 @@ class Blend(Dataset):
 
                     # trancate
                     a, b = self.trancate(a, b)
+
+                    assert len(a)==len(b)
 
                     d[dataset_type][gender][op]["Y_A"], d[dataset_type][gender][op]["Y_B"] = a, b
                     d[dataset_type][gender][op]["A"], d[dataset_type][gender][op]["B"] = self.trancate(
@@ -278,6 +280,7 @@ class Blend(Dataset):
 
 
                     elif self.state == "STFT":
+                        assert len(d[dataset_type][gender][op]["A"])==len(d[dataset_type][gender][op]["B"])
                         length = len(d[dataset_type][gender][op]["A"])
                         print(
                             "FROM dataset_type:{}, gender:{}, op:{}".format(dataset_type, self.gender_str(gender), op))
