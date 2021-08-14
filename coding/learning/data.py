@@ -36,11 +36,11 @@ class PatternSelection():
 
         """
         self.patterns = {
-            "CD": Pattern(enc=0, percent=0.1),
-            "HYP": Pattern(enc=1, percent=0.1),
-            "MI": Pattern(enc=2, percent=0.1),
-            "NORM": Pattern(enc=3, percent=0.01),
-            "STTC": Pattern(enc=4, percent=0.1)
+            "CD": Pattern(enc=0, percent=1),
+            "HYP": Pattern(enc=1, percent=1),
+            "MI": Pattern(enc=2, percent=1),
+            "NORM": Pattern(enc=3, percent=0.33),
+            "STTC": Pattern(enc=4, percent=1)
         }
         assert all([self.percent_is_valid(pattern.percent) for pattern in self.patterns.values()])
 
@@ -84,7 +84,6 @@ class PtbData(Dataset):
                 length = len(self.features)
 
                 for ii in range(length):
-                    label = self.labels[ii]
                     blob_obj = bucket.blob("{}".format(self.features[ii]))
                     sample = Image.open(io.BytesIO(blob_obj.download_as_bytes())).convert('L')
                     age = int(self.metadata[ii]['age'])
@@ -124,7 +123,8 @@ class PtbData(Dataset):
                                                         mask_A, mask_B, percent)
 
         c = list(zip(features, labels, metadata))
-        random.shuffle(c)
+        for i in range(5):
+            random.shuffle(c)
         features, labels, metadata = zip(*c)
 
         return features, labels, metadata
@@ -162,9 +162,7 @@ class DataModule(pl.LightningDataModule):
         self.state = 'train' if is_train else 'test'
 
         self.transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.5), (0.5))
-            # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            transforms.ToTensor()
         ])
 
     def prepare_data(self):

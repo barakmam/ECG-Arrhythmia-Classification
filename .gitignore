@@ -7,3 +7,5 @@ dataset/
 /model-azimuth-321409-241148a4b144.json
 /data/
 /venv/
+/ECG_spec_classify/
+/wandb/

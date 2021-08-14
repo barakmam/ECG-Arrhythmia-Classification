@@ -26,7 +26,7 @@ if __name__=="__main__":
     is_train = True
     state = 'train'
 
-    batch_size = 16
+    batch_size = 8
     input_shape = (1, 256, 256)
 
     super_classes = np.array(["CD", "HYP", "MI", "NORM", "STTC"])
@@ -67,8 +67,8 @@ if __name__=="__main__":
         mode='min')
 
     # Init our model
-    lr = 0.0005
-    weight_decay=1.5e-06
+    lr = 3e-5
+    weight_decay=1e-6
     loss_weights = torch.cuda.FloatTensor([1,1,1,1,1])
     model = Net1(input_shape, len(super_classes), loss_weights, device, learning_rate=lr,weight_decay=weight_decay)
 
@@ -76,8 +76,9 @@ if __name__=="__main__":
         logger=wandb_logger,    # W&B integration
         log_every_n_steps=5,   # set the logging frequency
         gpus=-1,                # use all GPUs
-        max_epochs=50,           # number of epochs
+        max_epochs=1000,           # number of epochs
         deterministic=True,     # keep it deterministic
+        auto_lr_find=True,
         callbacks=[
                    ImagePredictionLogger(val_samples, super_classes),
                    ModelCheckpoint(monitor='val_loss', filename=MODEL_CKPT, save_top_k=3, mode='min')
