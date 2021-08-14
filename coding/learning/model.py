@@ -19,7 +19,7 @@ class PaperNet(pl.LightningModule):
         self.learning_rate = learning_rate
         self.loss_weights = loss_weights
         self.automatic_optimization = True
-        weight_decay = weight_decay
+        self.weight_decay = weight_decay
 
         self.features = nn.Sequential(
             nn.Conv2d(1, 8, 4),
