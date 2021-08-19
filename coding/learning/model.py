@@ -27,15 +27,24 @@ class PaperNet(pl.LightningModule):
             nn.Conv2d(1, 8, 4),
             nn.BatchNorm2d(8),
             nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.Conv2d(8, 13, 2),
+            nn.BatchNorm2d(13),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.Conv2d(13, 13, 2),
+            nn.BatchNorm2d(13),
+            nn.ReLU(),
+            nn.MaxPool2d(2)
         ).to(device)
 
         self.features_num = self._get_conv_output(input_shape)
 
         self.classifier = nn.Sequential(
-            nn.Linear(self.features_num, 4),
-            nn.BatchNorm1d(4),
+            nn.Linear(self.features_num, 512),
+            nn.BatchNorm1d(512),
             nn.ReLU(),
-            nn.Linear(4, num_classes),
+            nn.Linear(512, num_classes),
             nn.Softmax(-1)
         ).to(device)
 
@@ -103,7 +112,7 @@ class Net1(PaperNet):
         self.dropout = dropout
 
         self.features = nn.Sequential(
-            nn.Conv2d(1, 64, 32),
+            nn.Conv2d(1, 8, 4),
             nn.BatchNorm2d(64),
             nn.Dropout2d(p=self.dropout),
             nn.ReLU(),

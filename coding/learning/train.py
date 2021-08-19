@@ -1,7 +1,7 @@
 import wandb
 import numpy as np
 from coding.learning.data import DataModule
-from coding.learning.model import Net1,ImagePredictionLogger
+from coding.learning.model import Net1,PaperNet,ImagePredictionLogger
 import torch
 import pickle
 import matplotlib.pyplot as plt
@@ -91,7 +91,8 @@ if __name__=="__main__":
 
     # Init our model
     weight_decay=0.01
-    model = Net1(input_shape, len(super_classes), device,  weight_decay=weight_decay)
+    #model = Net1(input_shape, len(super_classes), device,  weight_decay=weight_decay)
+    model = PaperNet(input_shape, len(super_classes), device, weight_decay)
 
     trainer = pl.Trainer(
         logger=wandb_logger,    # W&B integration
