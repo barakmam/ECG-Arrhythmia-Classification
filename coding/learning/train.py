@@ -10,6 +10,23 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
 import pytorch_lightning as pl
 
+class DatasetReport():
+    def __init__(self,data_map):
+        self.data_map=data_map
+
+    def get_len(self,category):
+        return len(category['A'])+len(category['B'])
+
+    def category_report(self,state,gender,age_group):
+        gender_code=0 if gender=='male' else 1
+        age_code='<' if age_group else '>='
+        print("state:{} gender:{} age_group:{} len:{}".format(state,gender,age_code,self.get_len(self.data_map[state][gender_code][age_code])))
+
+    def full_report(self):
+        for state in ['train','test']:
+            for gender in ['male','female']:
+                for age_group in [True,False]:
+                    self.category_report(state=state,gender=gender,age_group=age_group)
 
 
 if __name__=="__main__":
@@ -17,6 +34,12 @@ if __name__=="__main__":
     # setting device on GPU if available, else CPU
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Using device:', device)
+
+    with open('data_map.pickle', 'rb') as handle:
+        data_map = pickle.load(handle)
+
+    dataset_report=DatasetReport(data_map)
+    dataset_report.full_report()
 
     # Init our data pipeline
     data_map_url = "data_map"
@@ -26,7 +49,7 @@ if __name__=="__main__":
     is_train = True
     state = 'train'
 
-    batch_size = 8
+    batch_size = 128
     input_shape = (1, 256, 256)
 
     super_classes = np.array(["CD", "HYP", "MI", "NORM", "STTC"])
@@ -67,17 +90,15 @@ if __name__=="__main__":
         mode='min')
 
     # Init our model
-    lr = 3e-5
-    weight_decay=1e-6
-    loss_weights = torch.cuda.FloatTensor([1,1,1,1,1])
-    model = Net1(input_shape, len(super_classes), loss_weights, device, learning_rate=lr,weight_decay=weight_decay)
+    weight_decay=0.01
+    model = Net1(input_shape, len(super_classes), device,  weight_decay=weight_decay)
 
     trainer = pl.Trainer(
         logger=wandb_logger,    # W&B integration
         log_every_n_steps=5,   # set the logging frequency
         gpus=-1,                # use all GPUs
         max_epochs=1000,           # number of epochs
-        deterministic=True,     # keep it deterministic
+        #deterministic=True,     # keep it deterministic
         auto_lr_find=True,
         callbacks=[
                    ImagePredictionLogger(val_samples, super_classes),
