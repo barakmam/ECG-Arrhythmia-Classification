@@ -1,7 +1,7 @@
 import wandb
 import numpy as np
 from coding.learning.data import DataModule
-from coding.learning.model import Net1,PaperNet,ImagePredictionLogger
+from coding.learning.model import PaperNet,ImagePredictionLogger
 import torch
 import pickle
 import matplotlib.pyplot as plt
@@ -49,7 +49,7 @@ if __name__=="__main__":
     is_train = True
     state = 'train'
 
-    batch_size = 128
+    batch_size = 16
     input_shape = (1, 256, 256)
 
     super_classes = np.array(["CD", "HYP", "MI", "NORM", "STTC"])
@@ -90,7 +90,7 @@ if __name__=="__main__":
         mode='min')
 
     # Init our model
-    weight_decay=0.01
+    weight_decay=0.
     #model = Net1(input_shape, len(super_classes), device,  weight_decay=weight_decay)
     model = PaperNet(input_shape, len(super_classes), device, weight_decay)
 
