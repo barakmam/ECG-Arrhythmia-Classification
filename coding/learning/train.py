@@ -49,7 +49,7 @@ if __name__=="__main__":
     is_train = True
     state = 'train'
 
-    batch_size = 16
+    batch_size = 32
     input_shape = (1, 256, 256)
 
     super_classes = np.array(["CD", "HYP", "MI", "NORM", "STTC"])
@@ -90,28 +90,29 @@ if __name__=="__main__":
         mode='min')
 
     # Init our model
-    weight_decay=0.
+    weight_decay=0.01
     #model = Net1(input_shape, len(super_classes), device,  weight_decay=weight_decay)
     model = PaperNet(input_shape, len(super_classes), device, weight_decay)
 
-    trainer = pl.Trainer(
-        logger=wandb_logger,    # W&B integration
-        log_every_n_steps=5,   # set the logging frequency
-        gpus=-1,                # use all GPUs
-        max_epochs=1000,           # number of epochs
-        #deterministic=True,     # keep it deterministic
-        auto_lr_find=True,
-        callbacks=[
-                   ImagePredictionLogger(val_samples, super_classes),
-                   ModelCheckpoint(monitor='val_loss', filename=MODEL_CKPT, save_top_k=3, mode='min')
-                  #  EarlyStopping(monitor='val_loss',patience=3,verbose=False,mode='min')
-                    ] # see Callbacks section
+    for i in range(5):
+        trainer = pl.Trainer(
+            logger=wandb_logger,    # W&B integration
+            log_every_n_steps=5,   # set the logging frequency
+            gpus=-1,                # use all GPUs
+            max_epochs=25,           # number of epochs
+            #deterministic=True,     # keep it deterministic
+            auto_lr_find=True,
+            callbacks=[
+                       ImagePredictionLogger(val_samples, super_classes),
+                       ModelCheckpoint(monitor='val_loss', filename=MODEL_CKPT, save_top_k=3, mode='min')
+                      #  EarlyStopping(monitor='val_loss',patience=3,verbose=False,mode='min')
+                        ] # see Callbacks section
         )
 
 
-    trainer.fit(model, datamodule=dm)
+        trainer.fit(model, datamodule=dm)
 
     # evaluate the model on a test set
-    trainer.test(model)  # uses last-saved model
+    #trainer.test(model)  # uses last-saved model
     # Close wandb run
     wandb.finish()

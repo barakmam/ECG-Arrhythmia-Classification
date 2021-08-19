@@ -23,27 +23,29 @@ class PaperNet(pl.LightningModule):
         self.automatic_optimization = True
         self.weight_decay = weight_decay
 
+        self.features = nn.Sequential(
+            nn.Conv2d(1, 8, 4),
+            nn.BatchNorm2d(8),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.Conv2d(8, 13, 2),
+            nn.BatchNorm2d(13),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.Conv2d(13, 13, 2),
+            nn.BatchNorm2d(13),
+            nn.ReLU(),
+            nn.MaxPool2d(2)
+        ).to(device)
+
+        self.features_num = self._get_conv_output(input_shape)
+
         self.classifier = nn.Sequential(
-            #first layer
-            nn.Conv2d(in_channels=1,out_channels=8,kernel_size=(4,4)),
+            nn.Linear(self.features_num, 32),
+            nn.BatchNorm1d(32),
             nn.ReLU(),
-            nn.MaxPool2d(2,2),
-            #second layer
-            nn.Conv2d(in_channels=8,out_channels=13, kernel_size=(2, 2)),
-            nn.ReLU(),
-            nn.MaxPool2d(2, 2),
-            # third layer
-            nn.Conv2d(in_channels=13,out_channels=13, kernel_size=(2, 2)),
-            nn.ReLU(),
-            nn.MaxPool2d(2, 2),
-            nn.Flatten(),
-            nn.Dropout(self.dropout),
-            nn.Linear(11700,512),
-            nn.ReLU(),
-            nn.Linear(512,num_classes),
+            nn.Linear(32, num_classes),
             nn.Softmax(-1)
-
-
         ).to(device)
 
 
@@ -57,12 +59,15 @@ class PaperNet(pl.LightningModule):
         return n_size
 
     def forward(self, x):
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
         x = self.classifier(x)
         return x
 
     def training_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
+
         loss = F.nll_loss(F.log_softmax(logits), y)  # , weight=self.loss_weights)
 
         # training metrics
