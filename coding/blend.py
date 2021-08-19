@@ -13,6 +13,7 @@ import ast
 import json
 import uuid
 import cv2
+import pywt
 
 ## Setting credentials using the downloaded JSON file
 path = 'model-azimuth-321409-241148a4b144.json'
@@ -41,7 +42,7 @@ class Blend(Dataset):
         self.X_test = data["X_test"]
         self.X_test_meta = data["X_test_meta"]
         self.y_test = data["y_test"]
-        self.state = 'STFT'  # expected {STFT,permutation}
+        self.state = 'HaarWavelet'  # expected {STFT,permutation,HaarWavelet}
         self.bucket = client.get_bucket('ecg-arrhythmia-classification')
 
         # datasttruct
@@ -244,6 +245,27 @@ class Blend(Dataset):
         stft = np.stack(stft).T
         return stft
 
+    def haar_dwt(self,signal, levels=3):
+        """
+          Inputs:
+            signal - input signal for analysis.
+            levels – analysis depth.
+          Outputs:
+            approx - approximation of the signal at the last level.
+            details - list with levels arrays. list[j] should contain the
+            details of level j;
+        """
+        g_bar = 2 ** -0.5 * np.array([-1, 1])
+        h = 2 ** -0.5 * np.array([1, 1])
+
+        details = []
+        approx = signal
+        for ii in range(levels):
+            details.append(np.convolve(approx, g_bar, 'valid')[::2])
+            approx = np.convolve(approx, h, 'valid')[::2]
+
+        return approx, details
+
     def gender_str(self, gender):
         return 'male' if gender == 0 else 'female'
 
@@ -263,6 +285,7 @@ class Blend(Dataset):
         for dataset_type in self.dataset_types:
             for gender in self.genders:
                 for op in self.ops:
+                    assert len(d[dataset_type][gender][op]["A"]) == len(d[dataset_type][gender][op]["B"])
                     if self.state == "permutation":
                         for r, idx in zip(
                                 itertools.product(d[dataset_type][gender][op]["A"],
@@ -277,10 +300,7 @@ class Blend(Dataset):
                                     d[gender][op][f"meta_{single}"][idx[idx_single]])
                                 pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(
                                     d[gender][op][f"Y_{single}"][idx[idx_single]])
-
-
                     elif self.state == "STFT":
-                        assert len(d[dataset_type][gender][op]["A"])==len(d[dataset_type][gender][op]["B"])
                         length = len(d[dataset_type][gender][op]["A"])
                         print(
                             "FROM dataset_type:{}, gender:{}, op:{}".format(dataset_type, self.gender_str(gender), op))
@@ -319,8 +339,22 @@ class Blend(Dataset):
                                 if self.STFT_show:
                                     plt.show()
 
-                            object_name_in_gcs_bucket = self.bucket.blob('data_map'.format(self.state))
+                            object_name_in_gcs_bucket = self.bucket.blob('data_map')
                             object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
+                    elif self.state == "HaarWavelet":
+                        length = len(d[dataset_type][gender][op]["A"])
+                        print(
+                            "FROM dataset_type:{}, gender:{}, op:{}".format(dataset_type, self.gender_str(gender), op))
+                        for index in range(length):
+                            print("Now processing STFT img:{}/{} ".format(index + 1, length))
+                            for single in ["A", "B"]:
+                                ecg = d[dataset_type][gender][op][single][index].T[0]
+                                approximation,details= self.haar_dwt(ecg)
+                                haar_dwt=
+
+
+
+
                     else:
                         raise NotImplementedError
 
