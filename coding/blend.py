@@ -13,6 +13,7 @@ import ast
 import json
 import uuid
 import cv2
+import pywt
 
 ## Setting credentials using the downloaded JSON file
 path = 'model-azimuth-321409-241148a4b144.json'
@@ -41,7 +42,7 @@ class Blend(Dataset):
         self.X_test = data["X_test"]
         self.X_test_meta = data["X_test_meta"]
         self.y_test = data["y_test"]
-        self.state = 'STFT'  # expected {STFT,permutation}
+        self.state = 'HaarWavelet'  # expected {STFT,permutation,HaarWavelet}
         self.bucket = client.get_bucket('ecg-arrhythmia-classification')
 
         # datasttruct
@@ -244,8 +245,35 @@ class Blend(Dataset):
         stft = np.stack(stft).T
         return stft
 
+    def haar_dwt(self,signal, levels=3):
+        """
+          Inputs:
+            signal - input signal for analysis.
+            levels – analysis depth.
+          Outputs:
+            approx - approximation of the signal at the last level.
+            details - list with levels arrays. list[j] should contain the
+            details of level j;
+        """
+        g_bar = 2 ** -0.5 * np.array([-1, 1])
+        h = 2 ** -0.5 * np.array([1, 1])
+
+        details = []
+        approx = signal
+        for ii in range(levels):
+            details.append(np.convolve(approx, g_bar, 'valid')[::2])
+            approx = np.convolve(approx, h, 'valid')[::2]
+
+        return approx, details
+
     def gender_str(self, gender):
         return 'male' if gender == 0 else 'female'
+
+
+    def standertize_and_normalize(self,mat):
+        standard_mat = (mat - np.mean(mat)) / np.std(mat)
+        max, min = np.max(standard_mat), np.min(standard_mat)
+        return (standard_mat - min) / (max - min)
 
     def gcs_bucket(self, d):
         """
@@ -263,6 +291,7 @@ class Blend(Dataset):
         for dataset_type in self.dataset_types:
             for gender in self.genders:
                 for op in self.ops:
+                    assert len(d[dataset_type][gender][op]["A"]) == len(d[dataset_type][gender][op]["B"])
                     if self.state == "permutation":
                         for r, idx in zip(
                                 itertools.product(d[dataset_type][gender][op]["A"],
@@ -277,15 +306,10 @@ class Blend(Dataset):
                                     d[gender][op][f"meta_{single}"][idx[idx_single]])
                                 pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(
                                     d[gender][op][f"Y_{single}"][idx[idx_single]])
-
-
                     elif self.state == "STFT":
-                        assert len(d[dataset_type][gender][op]["A"])==len(d[dataset_type][gender][op]["B"])
                         length = len(d[dataset_type][gender][op]["A"])
-                        print(
-                            "FROM dataset_type:{}, gender:{}, op:{}".format(dataset_type, self.gender_str(gender), op))
                         for index in range(length):
-                            print("Now processing STFT img:{}/{} ".format(index + 1, length))
+                            print("Now processing state:{} dataset_type:{}, gender:{}, op:{} img:{}/{} ".format(self.state,dataset_type, self.gender_str(gender), op,index + 1, length))
 
                             for single in ["A", "B"]:
 
@@ -295,15 +319,19 @@ class Blend(Dataset):
 
                                 im = np.abs(X_stft)
                                 middle_y = im.shape[1] // 2
-                                plt.imsave("myplot.jpeg", cv2.resize(im[middle_y:, 140:-145],(256,256),interpolation=cv2.INTER_CUBIC))  #588,873
+
+                                #standertize and normalize
+                                mat=self.standertize_and_normalize(im[middle_y:, 140:-145])
+
+                                plt.imsave("myplot.jpeg", cv2.resize(mat,(256,256),interpolation=cv2.INTER_CUBIC))  #588,873
 
                                 # Y
                                 try:
                                     y = d[dataset_type][gender][op][f"Y_{single}"].iloc[index][0]
                                     pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(super_classes[y])
                                 except IndexError:
-                                    print("Processing STFT img:{}/{} failed due to Index error")
-                                    continue
+                                    print("Processing of state:{} index:{} failed due to Index error".format(self.state,index))
+                                    break
 
                                 # create the dataset: data+metadata
                                 file_uuided = str(uuid.uuid4())
@@ -312,15 +340,49 @@ class Blend(Dataset):
                                 with open("./myplot.jpeg", 'rb') as f:
                                     blob.upload_from_file(f)
 
-                                pkl_dict[dataset_type][gender][op][single].append("STFT/" + file_uuided + ".jpeg")
+                                pkl_dict[dataset_type][gender][op][single].append("{}/{}.jpeg".format(self.state,file_uuided))
                                 pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
                                     d[dataset_type][gender][op][f"meta_{single}"][index])
 
                                 if self.STFT_show:
                                     plt.show()
 
-                            object_name_in_gcs_bucket = self.bucket.blob('data_map'.format(self.state))
+                            object_name_in_gcs_bucket = self.bucket.blob('data_map:{}'.format(self.state))
                             object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
+                    elif self.state == "HaarWavelet":
+                        length = len(d[dataset_type][gender][op]["A"])
+                        for index in range(length):
+                            print("Now processing state:{} dataset_type:{}, gender:{}, op:{} img:{}/{} ".format(self.state,dataset_type, self.gender_str(gender), op,index + 1, length))
+                            for single in ["A", "B"]:
+
+                                ecg = d[dataset_type][gender][op][single][index].T[0]
+                                approximation,details= self.haar_dwt(ecg)
+                                haar_dwt=np.concatenate([approximation,np.concatenate(details)])
+                                mat=self.standertize_and_normalize(haar_dwt)
+
+                                # Y
+                                try:
+                                    y = d[dataset_type][gender][op][f"Y_{single}"].iloc[index][0]
+                                    pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(super_classes[y])
+                                except IndexError:
+                                    print("Processing of state:{} index:{} failed due to Index error".format(self.state,
+                                                                                                             index))
+                                    break
+
+                                file_uuided = str(uuid.uuid4())
+
+                                object_name_in_gcs_bucket=self.bucket.blob('{}/{}'.format(self.state,file_uuided))
+                                object_name_in_gcs_bucket.upload_from_string(str(mat))
+
+                                pkl_dict[dataset_type][gender][op][single].append("{}/{}".format(self.state,file_uuided))
+                                pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
+                                    d[dataset_type][gender][op][f"meta_{single}"][index])
+
+                            object_name_in_gcs_bucket = self.bucket.blob('data_map:{}'.format(self.state))
+                            object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
+
+
+
                     else:
                         raise NotImplementedError
 
@@ -331,12 +393,19 @@ class Blend(Dataset):
         https://stackoverflow.com/questions/7290370/store-and-reload-matplotlib-pyplot-object
         """
 
-        blob = self.bucket.blob('data_map'.format(self.state))
+        blob = self.bucket.blob('data_map:{}'.format(self.state))
         d = ast.literal_eval(blob.download_as_string().decode('utf-8'))
 
-        blob = self.bucket.blob("{}".format(d['train'][0]['<']['A'][0]))
-        pickle.loads(blob.download_as_bytes())
-        plt.show()
+        if self.state=='STFT':
+            blob = self.bucket.blob("{}".format(d['train'][0]['<']['A'][0]))
+            pickle.loads(blob.download_as_bytes())
+            plt.show()
+        elif self.state=='HaarWavelet':
+            blob = self.bucket.blob("{}".format(d['train'][0]['<']['A'][0]))
+
+            s=" ".join(blob.download_as_string().decode('utf-8').split())
+            wavelet = ast.literal_eval(s.replace('\n','').replace(' ',','))
+            print(wavelet)
 
     def blend_in_time(self, A, B):
         """
@@ -386,5 +455,5 @@ if __name__ == "__main__":
     b = Blend()
     pairs = b.find_pairs()
     b.gcs_bucket(pairs)
-    # b.load_dataset()
+    b.load_dataset()
     # b.blend_and_plot_ecg(pairs, 0)
