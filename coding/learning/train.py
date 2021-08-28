@@ -42,7 +42,7 @@ if __name__=="__main__":
     dataset_report.full_report()
 
     # Init our data pipeline
-    data_map_url = "data_map"
+    data_map_url = "data_map:STFT"
     data_url = "STFT"
     gender = "male"
     under_50 = True
@@ -90,16 +90,16 @@ if __name__=="__main__":
         mode='min')
 
     # Init our model
-    weight_decay=0.01
+    weight_decay=0.0005
     #model = Net1(input_shape, len(super_classes), device,  weight_decay=weight_decay)
     model = PaperNet(input_shape, len(super_classes), device, weight_decay)
 
-    for i in range(5):
+    for i in range(100):
         trainer = pl.Trainer(
             logger=wandb_logger,    # W&B integration
             log_every_n_steps=5,   # set the logging frequency
             gpus=-1,                # use all GPUs
-            max_epochs=25,           # number of epochs
+            max_epochs=10,           # number of epochs
             #deterministic=True,     # keep it deterministic
             auto_lr_find=True,
             callbacks=[
