@@ -7,7 +7,7 @@ import ast
 class Dataset:
     def __init__(self):
 
-        self.path = './toy_data/'
+        self.path = './data/'
         self.sampling_rate = 100
 
         # Load scp_statements.csv for diagnostic aggregation

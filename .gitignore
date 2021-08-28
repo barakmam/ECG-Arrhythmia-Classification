@@ -9,3 +9,4 @@ dataset/
 /venv/
 /ECG_spec_classify/
 /wandb/
+/STFT/

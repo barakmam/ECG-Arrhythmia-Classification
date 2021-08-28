@@ -42,7 +42,7 @@ class Blend(Dataset):
         self.X_test = data["X_test"]
         self.X_test_meta = data["X_test_meta"]
         self.y_test = data["y_test"]
-        self.state = 'HaarWavelet'  # expected {STFT,permutation,HaarWavelet}
+        self.state = 'STFT'  # expected {STFT,permutation,HaarWavelet}
         self.bucket = client.get_bucket('ecg-arrhythmia-classification')
 
         # datasttruct
@@ -378,10 +378,8 @@ class Blend(Dataset):
                                 pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
                                     d[dataset_type][gender][op][f"meta_{single}"][index])
 
-                            object_name_in_gcs_bucket = self.bucket.blob('data_map:{}'.format(self.state))
-                            object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
-
-
+                        object_name_in_gcs_bucket = self.bucket.blob('data_map:{}'.format(self.state))
+                        object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
 
                     else:
                         raise NotImplementedError
@@ -455,5 +453,5 @@ if __name__ == "__main__":
     b = Blend()
     pairs = b.find_pairs()
     b.gcs_bucket(pairs)
-    b.load_dataset()
+    #b.load_dataset()
     # b.blend_and_plot_ecg(pairs, 0)

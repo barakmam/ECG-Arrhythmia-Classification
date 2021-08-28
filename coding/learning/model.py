@@ -24,44 +24,29 @@ class PaperNet(pl.LightningModule):
         self.weight_decay = weight_decay
 
         self.features = nn.Sequential(
+            #first layer
             nn.Conv2d(1, 8, 4),
-            nn.BatchNorm2d(8),
             nn.ReLU(),
             nn.MaxPool2d(2),
+            #second layer
             nn.Conv2d(8, 13, 2),
-            nn.BatchNorm2d(13),
             nn.ReLU(),
             nn.MaxPool2d(2),
+            #third layer
             nn.Conv2d(13, 13, 2),
-            nn.BatchNorm2d(13),
             nn.ReLU(),
-            nn.MaxPool2d(2)
-        ).to(device)
-
-        self.features_num = self._get_conv_output(input_shape)
-
-        self.classifier = nn.Sequential(
-            nn.Linear(self.features_num, 32),
-            nn.BatchNorm1d(32),
+            nn.MaxPool2d(2),
+            nn.Flatten(),
+            nn.Dropout(0.1),
+            nn.Linear(11700, 4096),
             nn.ReLU(),
-            nn.Linear(32, num_classes),
+            nn.Linear(4096, num_classes),
             nn.Softmax(-1)
         ).to(device)
 
 
-    # returns the size of the output tensor going into Linear layer from the conv block.
-    def _get_conv_output(self, shape):
-        batch_size = 1
-        input = torch.autograd.Variable(torch.rand(batch_size, *shape)).cuda()
-
-        output_feat = self.features(input)
-        n_size = output_feat.data.view(batch_size, -1).size(1)
-        return n_size
-
     def forward(self, x):
         x = self.features(x)
-        x = x.view(x.size(0), -1)
-        x = self.classifier(x)
         return x
 
     def training_step(self, batch, batch_idx):
