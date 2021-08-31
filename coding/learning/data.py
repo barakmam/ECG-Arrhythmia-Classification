@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import torch
 import numpy as np
 import pytorch_lightning as pl
-
+import wandb
 from google.cloud import storage
 import pickle
 from torchvision import transforms
@@ -103,6 +103,11 @@ class PtbData(Dataset):
                 self.labels = pickle.load(handle)
 
         self.files = os.listdir(self.root_images)
+
+        run=wandb.init(project='ECG_spec_classify')
+        artifact = wandb.Artifact('STFT', type='dataset')
+        artifact.add_dir('./STFT')
+        run.log_artifact(artifact)
 
     def feature_label_metadata_selection(self):
         features, labels, metadata = [], [], []

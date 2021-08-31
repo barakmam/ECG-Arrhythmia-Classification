@@ -13,10 +13,12 @@ dropout = 0.1
 
 
 class PaperNet(pl.LightningModule):
-    def __init__(self, input_shape, num_classes, device, weight_decay=1.5e-06):
+    def __init__(self, input_shape, num_classes, device,lr,loss_weights, weight_decay=1.5e-06):
         super().__init__()
 
         self.dropout = dropout
+        self.loss_weights=loss_weights
+        self.lr=lr
 
         # log hyperparameters
         self.save_hyperparameters()
@@ -24,40 +26,59 @@ class PaperNet(pl.LightningModule):
         self.weight_decay = weight_decay
 
         self.features = nn.Sequential(
-            #first layer
+            #layer 1
             nn.Conv2d(1, 8, 4),
+            nn.BatchNorm2d(8),
             nn.ReLU(),
             nn.MaxPool2d(2),
-            #second layer
+            #layer 2
             nn.Conv2d(8, 13, 2),
+            nn.BatchNorm2d(13),
             nn.ReLU(),
             nn.MaxPool2d(2),
-            #third layer
-            nn.Conv2d(13, 13, 2),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
+            #layer 3
+            # nn.Conv2d(13, 13, 2),
+            # nn.BatchNorm2d(13),
+            # nn.ReLU(),
+            # nn.MaxPool2d(2),
             nn.Flatten(),
-            nn.Dropout(0.1),
-            nn.Linear(11700, 4096),
+            nn.Dropout()
+        ).to(device)
+
+        self.features_num = self._get_conv_output(input_shape)
+
+        self.classifier = nn.Sequential(
+            nn.Linear(self.features_num, 8),
+            nn.BatchNorm1d(8),
             nn.ReLU(),
-            nn.Linear(4096, num_classes),
+            nn.Linear(8, num_classes),
             nn.Softmax(-1)
         ).to(device)
 
+    # returns the size of the output tensor going into Linear layer from the conv block.
+    def _get_conv_output(self, shape):
+        batch_size = 1
+        input = torch.autograd.Variable(torch.rand(batch_size, *shape)).cuda()
+
+        output_feat = self.features(input)
+        n_size = output_feat.data.view(batch_size, -1).size(1)
+        return n_size
 
     def forward(self, x):
         x = self.features(x)
+        x = x.view(x.size(0), -1)
+        x = self.classifier(x)
         return x
 
     def training_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
 
-        loss = F.nll_loss(F.log_softmax(logits), y)  # , weight=self.loss_weights)
+        loss = F.nll_loss(logits, y,self.loss_weights)  # , weight=self.loss_weights)
 
         # training metrics
         preds = torch.argmax(logits, dim=1)
-        acc = accuracy(preds, y)
+        acc = accuracy(preds, y,self.loss_weights)
         self.log('train_loss', loss, on_step=True, on_epoch=True, logger=True)
         self.log('train_acc', acc, on_step=True, on_epoch=True, logger=True)
 
@@ -67,7 +88,7 @@ class PaperNet(pl.LightningModule):
         x, y = batch
         logits = self(x)
 
-        loss = F.nll_loss(F.log_softmax(logits), y)  # , weight=self.loss_weights)
+        loss = F.nll_loss(logits, y,self.loss_weights)  # , weight=self.loss_weights)
         # validation metrics
         preds = torch.argmax(logits, dim=1)
         acc = accuracy(preds, y)
@@ -78,7 +99,7 @@ class PaperNet(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = F.nll_loss(F.log_softmax(logits), y)  # weight=self.loss_weights)
+        loss = F.nll_loss(logits, y,self.loss_weights)  # weight=self.loss_weights)
 
         # validation metrics
         preds = torch.argmax(logits, dim=1)
@@ -89,7 +110,11 @@ class PaperNet(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), weight_decay=self.weight_decay)
-        return optimizer
+        lr_scheduler = {'scheduler': torch.optim.lr_scheduler.StepLR(
+            optimizer,step_size=self.lr),
+
+        }
+        return [optimizer],[lr_scheduler]
 
 
 

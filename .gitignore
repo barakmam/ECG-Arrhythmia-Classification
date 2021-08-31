@@ -10,3 +10,5 @@ dataset/
 /ECG_spec_classify/
 /wandb/
 /STFT/
+/STFT_bucket/
+/HaarWavelet/
