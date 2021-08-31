@@ -9,61 +9,46 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
 import wandb
 
-dropout = 0.1
-
 
 class PaperNet(pl.LightningModule):
-    def __init__(self, input_shape, num_classes, device,lr,loss_weights, weight_decay=1.5e-06):
+    def __init__(self, input_shape, num_classes, device,batch_size,lr,loss_weights, weight_decay=1.5e-06):
         super().__init__()
 
-        self.dropout = dropout
         self.loss_weights=loss_weights
         self.lr=lr
+        self.batch_size=batch_size
 
         # log hyperparameters
         self.save_hyperparameters()
         self.automatic_optimization = True
         self.weight_decay = weight_decay
 
+
+
         self.features = nn.Sequential(
-            nn.Conv2d(1, 8, 4),
-            nn.BatchNorm2d(8),
+            nn.Conv2d(1,1, 8),
+            nn.BatchNorm2d(1),
             nn.ReLU(),
             nn.MaxPool2d(2),
-            nn.Conv2d(8, 13, 2),
-            nn.BatchNorm2d(13),
+            nn.Conv2d(1, 1, 4),
+            nn.BatchNorm2d(1),
             nn.ReLU(),
             nn.MaxPool2d(2),
-            nn.Conv2d(13, 13, 2),
-            nn.BatchNorm2d(13),
+            nn.Conv2d(1, 1, 2),
+            nn.BatchNorm2d(1),
             nn.ReLU(),
-            nn.MaxPool2d(2)
+            nn.MaxPool2d(2),
         ).to(device)
 
         self.features_num = self._get_conv_output(input_shape)
 
         self.classifier = nn.Sequential(
-            nn.Linear(self.features_num, 32),
-            nn.BatchNorm1d(32),
+            nn.Linear(self.features_num, 1),
+            nn.BatchNorm1d(1),
             nn.ReLU(),
-            nn.Linear(32, num_classes),
+            nn.Linear(1, num_classes),
             nn.Softmax(-1)
         ).to(device)
-
-    # returns the size of the output tensor going into Linear layer from the conv block.
-    def _get_conv_output(self, shape):
-        batch_size = 1
-        input = torch.autograd.Variable(torch.rand(batch_size, *shape)).cuda()
-
-        output_feat = self.features(input)
-        n_size = output_feat.data.view(batch_size, -1).size(1)
-        return n_size
-
-    def forward(self, x):
-        x = self.features(x)
-        x = x.view(x.size(0), -1)
-        x = self.classifier(x)
-        return x
 
     # returns the size of the output tensor going into Linear layer from the conv block.
     def _get_conv_output(self, shape):
@@ -121,7 +106,7 @@ class PaperNet(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), weight_decay=self.weight_decay)
         lr_scheduler = {'scheduler': torch.optim.lr_scheduler.StepLR(
-            optimizer,step_size=25,gamma=0.33),
+            optimizer,step_size=25,gamma=0.9),
         }
 
         # lr_scheduler = {'scheduler': torch.optim.lr_scheduler.MultiStepLR(

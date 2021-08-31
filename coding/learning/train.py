@@ -50,11 +50,11 @@ if __name__=="__main__":
     is_train = True
     state = 'train'
 
-    batch_size = 256
+    batch_size = 64
     input_shape = (1, 256, 256)
 
     max_epoches=5*20
-    weight_decay=0.005
+    weight_decay=0.000
     lr= 5e-4
 
     super_classes = np.array(["CD", "HYP", "MI", "NORM", "STTC"])
@@ -124,7 +124,7 @@ if __name__=="__main__":
 
     # Init our model
     loss_weights = torch.cuda.FloatTensor(label_hist[1])
-    model = PaperNet(input_shape, len(super_classes), device,lr,loss_weights,weight_decay)
+    model = PaperNet(input_shape, len(super_classes), device,batch_size,lr,loss_weights,weight_decay)
 
 
     trainer = pl.Trainer(
