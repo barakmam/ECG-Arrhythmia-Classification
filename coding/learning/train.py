@@ -20,14 +20,15 @@ class DatasetReport():
     def category_report(self,state,gender,age_group):
         gender_code=0 if gender=='male' else 1
         age_code='<' if age_group else '>='
-        print("state:{} gender:{} age_group:{} len:{}".format(state,gender,age_code,self.get_len(self.data_map[state][gender_code][age_code])))
+        return "state:{} gender:{} age_group:{} len:{}".format(state,gender,age_code,self.get_len(self.data_map[state][gender_code][age_code]))
 
     def full_report(self):
+        full_report=[]
         for state in ['train','test']:
             for gender in ['male','female']:
                 for age_group in [True,False]:
-                    self.category_report(state=state,gender=gender,age_group=age_group)
-
+                    full_report.append(self.category_report(state=state,gender=gender,age_group=age_group))
+        return full_report
 
 if __name__=="__main__":
 
@@ -39,23 +40,58 @@ if __name__=="__main__":
         data_map = pickle.load(handle)
 
     dataset_report=DatasetReport(data_map)
-    dataset_report.full_report()
+
 
     # Init our data pipeline
     data_map_url = "data_map:STFT"
     data_url = "STFT"
     gender = "male"
-    under_50 = True
+    under_50 = False
     is_train = True
     state = 'train'
 
-    batch_size = 32
+    batch_size = 64
     input_shape = (1, 256, 256)
+
+    max_epoches=5*20
+    weight_decay=0.000
+    lr= 5e-4
 
     super_classes = np.array(["CD", "HYP", "MI", "NORM", "STTC"])
     dm = DataModule(batch_size, data_map_url, data_url, gender, under_50, is_train)
     dm.prepare_data()
     dm.setup()
+
+    #wandb init
+    # with wandb.init(project='ECG_spec_classify', job_type='dataset') as run:
+    #
+    #
+    #     artifact = wandb.Artifact('dataset', type='dataset',
+    #                               description="male | over 50 | train",
+    #                               metadata={
+    #                                   "report":dataset_report.full_report(),
+    #                                   "input_shape":input_shape
+    #                               }
+    #     )
+    #     artifact.add_dir('./STFT')
+    #     run.log_artifact(artifact)
+
+    wandb_logger = WandbLogger(project='ECG_spec_classify')
+    # with wandb.init(project='ECG_spec_classify', job_type='train') as run:
+    #
+    #     artifact=wandb.Artifact('train', type='train',
+    #                             description='training male | over 50',
+    #                             metadata={
+    #                                 'batch_size':batch_size,
+    #                                 'input_shape':input_shape,
+    #                                 'classes': super_classes,
+    #                                 "weight_decay":weight_decay,
+    #                                 "max_epoches":max_epoches,
+    #                                 "lr":lr
+    #                             })
+    #
+    #     run.log_artifact(artifact)
+
 
     with open('labels.pickle', 'rb') as handle:
         labels = pickle.load(handle)
@@ -68,9 +104,6 @@ if __name__=="__main__":
     val_samples = next(iter(dm.val_dataloader()))
     val_imgs, val_labels = val_samples[0], val_samples[1]
 
-    # Initialize wandb
-    wandb.init(project='ECG_spec_classify')
-    wandb_logger = WandbLogger(project='ECG_spec_classify', job_type='train')
 
 
     early_stop_callback = EarlyStopping(
@@ -90,27 +123,25 @@ if __name__=="__main__":
         mode='min')
 
     # Init our model
-    weight_decay=0.0005
-    #model = Net1(input_shape, len(super_classes), device,  weight_decay=weight_decay)
-    model = PaperNet(input_shape, len(super_classes), device, weight_decay)
-
-    for i in range(100):
-        trainer = pl.Trainer(
-            logger=wandb_logger,    # W&B integration
-            log_every_n_steps=5,   # set the logging frequency
-            gpus=-1,                # use all GPUs
-            max_epochs=10,           # number of epochs
-            #deterministic=True,     # keep it deterministic
-            auto_lr_find=True,
-            callbacks=[
-                       ImagePredictionLogger(val_samples, super_classes),
-                       ModelCheckpoint(monitor='val_loss', filename=MODEL_CKPT, save_top_k=3, mode='min')
-                      #  EarlyStopping(monitor='val_loss',patience=3,verbose=False,mode='min')
-                        ] # see Callbacks section
-        )
+    loss_weights = torch.cuda.FloatTensor(label_hist[1])
+    model = PaperNet(input_shape, len(super_classes), device,batch_size,lr,loss_weights,weight_decay)
 
 
-        trainer.fit(model, datamodule=dm)
+    trainer = pl.Trainer(
+        logger=wandb_logger,    # W&B integration
+        log_every_n_steps=5,   # set the logging frequency
+        gpus=-1,                # use all GPUs
+        max_epochs=max_epoches,           # number of epochs
+        #deterministic=True,     # keep it deterministic
+        auto_lr_find=True,
+        callbacks=[
+                   ImagePredictionLogger(val_samples, super_classes),
+                   #ModelCheckpoint(monitor='val_loss', filename=MODEL_CKPT, save_top_k=3, mode='min')
+                  #  EarlyStopping(monitor='val_loss',patience=3,verbose=False,mode='min')
+                    ] # see Callbacks section
+    )
+
+    trainer.fit(model, datamodule=dm)
 
     # evaluate the model on a test set
     #trainer.test(model)  # uses last-saved model

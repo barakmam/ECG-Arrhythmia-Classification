@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import torch
 import numpy as np
 import pytorch_lightning as pl
-
+import wandb
 from google.cloud import storage
 import pickle
 from torchvision import transforms
@@ -177,15 +177,15 @@ class DataModule(pl.LightningDataModule):
                                transform=self.transform)
             self.train, self.val = random_split(ptb_full, [round(len(ptb_full) * 0.8),
                                                            len(ptb_full) - round(len(ptb_full) * 0.8)])
-            print('len ptb_full: ', len(ptb_full))
-            print('len train: ', len(self.train))
-            print('len val: ', len(self.val))
+            # print('len ptb_full: ', len(ptb_full))
+            # print('len train: ', len(self.train))
+            # print('len val: ', len(self.val))
 
         # Assign test dataset for use in dataloader(s)
         if stage == 'test' or stage is None:
             self.test = PtbData(self.data_map_url, self.data_url, self.gender, self.under_50, 'test',
                                 transform=self.transform)
-            print('len test: ', len(self.test))
+            # print('len test: ', len(self.test))
 
     def train_dataloader(self):
         return DataLoader(self.train, batch_size=self.batch_size, shuffle=True)
