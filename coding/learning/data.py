@@ -104,11 +104,6 @@ class PtbData(Dataset):
 
         self.files = os.listdir(self.root_images)
 
-        run=wandb.init(project='ECG_spec_classify')
-        artifact = wandb.Artifact('STFT', type='dataset')
-        artifact.add_dir('./STFT')
-        run.log_artifact(artifact)
-
     def feature_label_metadata_selection(self):
         features, labels, metadata = [], [], []
         for pattern in self.feature_selection.patterns.values():
@@ -182,15 +177,15 @@ class DataModule(pl.LightningDataModule):
                                transform=self.transform)
             self.train, self.val = random_split(ptb_full, [round(len(ptb_full) * 0.8),
                                                            len(ptb_full) - round(len(ptb_full) * 0.8)])
-            print('len ptb_full: ', len(ptb_full))
-            print('len train: ', len(self.train))
-            print('len val: ', len(self.val))
+            # print('len ptb_full: ', len(ptb_full))
+            # print('len train: ', len(self.train))
+            # print('len val: ', len(self.val))
 
         # Assign test dataset for use in dataloader(s)
         if stage == 'test' or stage is None:
             self.test = PtbData(self.data_map_url, self.data_url, self.gender, self.under_50, 'test',
                                 transform=self.transform)
-            print('len test: ', len(self.test))
+            # print('len test: ', len(self.test))
 
     def train_dataloader(self):
         return DataLoader(self.train, batch_size=self.batch_size, shuffle=True)

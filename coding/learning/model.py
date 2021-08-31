@@ -26,34 +26,44 @@ class PaperNet(pl.LightningModule):
         self.weight_decay = weight_decay
 
         self.features = nn.Sequential(
-            #layer 1
             nn.Conv2d(1, 8, 4),
             nn.BatchNorm2d(8),
             nn.ReLU(),
             nn.MaxPool2d(2),
-            #layer 2
             nn.Conv2d(8, 13, 2),
             nn.BatchNorm2d(13),
             nn.ReLU(),
             nn.MaxPool2d(2),
-            #layer 3
-            # nn.Conv2d(13, 13, 2),
-            # nn.BatchNorm2d(13),
-            # nn.ReLU(),
-            # nn.MaxPool2d(2),
-            nn.Flatten(),
-            nn.Dropout()
+            nn.Conv2d(13, 13, 2),
+            nn.BatchNorm2d(13),
+            nn.ReLU(),
+            nn.MaxPool2d(2)
         ).to(device)
 
         self.features_num = self._get_conv_output(input_shape)
 
         self.classifier = nn.Sequential(
-            nn.Linear(self.features_num, 8),
-            nn.BatchNorm1d(8),
+            nn.Linear(self.features_num, 32),
+            nn.BatchNorm1d(32),
             nn.ReLU(),
-            nn.Linear(8, num_classes),
+            nn.Linear(32, num_classes),
             nn.Softmax(-1)
         ).to(device)
+
+    # returns the size of the output tensor going into Linear layer from the conv block.
+    def _get_conv_output(self, shape):
+        batch_size = 1
+        input = torch.autograd.Variable(torch.rand(batch_size, *shape)).cuda()
+
+        output_feat = self.features(input)
+        n_size = output_feat.data.view(batch_size, -1).size(1)
+        return n_size
+
+    def forward(self, x):
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        x = self.classifier(x)
+        return x
 
     # returns the size of the output tensor going into Linear layer from the conv block.
     def _get_conv_output(self, shape):
@@ -111,9 +121,12 @@ class PaperNet(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), weight_decay=self.weight_decay)
         lr_scheduler = {'scheduler': torch.optim.lr_scheduler.StepLR(
-            optimizer,step_size=self.lr),
-
+            optimizer,step_size=25,gamma=0.33),
         }
+
+        # lr_scheduler = {'scheduler': torch.optim.lr_scheduler.MultiStepLR(
+        #     optimizer,milestones=[5,10]),
+        # }
         return [optimizer],[lr_scheduler]
 
 
