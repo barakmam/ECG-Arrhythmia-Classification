@@ -25,12 +25,15 @@ class PaperNet(pl.LightningModule):
 
         self.features = nn.Sequential(
             nn.Conv2d(1, 8, 4),
+            nn.BatchNorm2d(8),
             nn.ReLU(),
             nn.MaxPool2d(2),
             nn.Conv2d(8, 13, 2),
+            nn.BatchNorm2d(13),
             nn.ReLU(),
             nn.MaxPool2d(2),
             nn.Conv2d(13, 13, 2),
+            nn.BatchNorm2d(13),
             nn.ReLU(),
             nn.MaxPool2d(2)
         ).to(device)
