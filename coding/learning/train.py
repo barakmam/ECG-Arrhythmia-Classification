@@ -50,12 +50,12 @@ if __name__=="__main__":
     is_train = True
     state = 'train'
 
-    batch_size = 64
+    batch_size = 8
     input_shape = (1, 256, 256)
 
-    max_epoches=5*20
-    weight_decay=0.000
-    lr= 5e-4
+    max_epoches=10*80
+    lr = 1
+    weight_decay = 0.0005
 
     super_classes = np.array(["CD", "HYP", "MI", "NORM", "STTC"])
     dm = DataModule(batch_size, data_map_url, data_url, gender, under_50, is_train)

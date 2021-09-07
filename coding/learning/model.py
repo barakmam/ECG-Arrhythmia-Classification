@@ -24,20 +24,19 @@ class PaperNet(pl.LightningModule):
         self.weight_decay = weight_decay
 
 
-
         self.features = nn.Sequential(
-            nn.Conv2d(1,1, 8),
-            nn.BatchNorm2d(1),
+            nn.Conv2d(1, 8, 4),
+            nn.BatchNorm2d(8),
             nn.ReLU(),
             nn.MaxPool2d(2),
-            nn.Conv2d(1, 1, 4),
-            nn.BatchNorm2d(1),
+            nn.Conv2d(8, 13, 2),
+            nn.BatchNorm2d(13),
             nn.ReLU(),
             nn.MaxPool2d(2),
-            nn.Conv2d(1, 1, 2),
-            nn.BatchNorm2d(1),
+            nn.Conv2d(13, 13, 2),
+            nn.BatchNorm2d(13),
             nn.ReLU(),
-            nn.MaxPool2d(2),
+            nn.MaxPool2d(2)
         ).to(device)
 
         self.features_num = self._get_conv_output(input_shape)
@@ -46,9 +45,12 @@ class PaperNet(pl.LightningModule):
             nn.Linear(self.features_num, 1),
             nn.BatchNorm1d(1),
             nn.ReLU(),
+            nn.Dropout(),
             nn.Linear(1, num_classes),
             nn.Softmax(-1)
         ).to(device)
+
+
 
     # returns the size of the output tensor going into Linear layer from the conv block.
     def _get_conv_output(self, shape):
@@ -106,7 +108,7 @@ class PaperNet(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), weight_decay=self.weight_decay)
         lr_scheduler = {'scheduler': torch.optim.lr_scheduler.StepLR(
-            optimizer,step_size=25,gamma=0.9),
+            optimizer,step_size=3,gamma=0.90),
         }
 
         # lr_scheduler = {'scheduler': torch.optim.lr_scheduler.MultiStepLR(
