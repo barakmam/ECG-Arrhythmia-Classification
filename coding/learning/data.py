@@ -32,12 +32,12 @@ class Pattern():
 
 
 class DataModule(pl.LightningDataModule):
-    def __init__(self, batch_size, is_train,files_root, transform=None):
+    def __init__(self, batch_size, is_train,data_dir, transform=None):
         super().__init__()
         self.batch_size = batch_size
         self.state = 'train' if is_train else 'test'
         self.classes = super_classes = ["CD", "HYP", "MI", "NORM", "STTC"]
-        self.files_root = files_root
+        self.data_dir = data_dir
         self.number_of_files=sum([len(os.listdir(f'./STFT/STFT_{x}')) for x in self.classes])
 
         self.transform = transforms.Compose([
@@ -48,7 +48,9 @@ class DataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         # Assign train/val datasets for use in dataloaders
         if stage == 'train' or stage is None:
-            self.train, self.val = random_split(self.files_root)
+            data_full = Dataset(self.data_dir, train=True, transform=self.transform)
+            self.train, self.val = random_split(data_full, [round(self.number_of_files * 0.8),
+                                                           self.number_of_files - round(self.number_of_files * 0.8)])
 
         # Assign test dataset for use in dataloader(s)
         if stage == 'test' or stage is None:

@@ -43,7 +43,7 @@ if __name__=="__main__":
 
 
     # Init our data pipeline
-    files_root='./STFT'
+    data_dir='./STFT'
     is_train = True
     batch_size = 8
     input_shape = (1, 256, 256)
@@ -53,7 +53,7 @@ if __name__=="__main__":
     weight_decay = 0.0005
 
     super_classes = np.array(["CD", "HYP", "MI", "NORM", "STTC"])
-    dm = DataModule(batch_size, is_train, files_root=files_root)
+    dm = DataModule(batch_size, is_train, data_dir=data_dir)
     dm.setup()
 
     #wandb init
