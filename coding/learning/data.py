@@ -76,16 +76,30 @@ class PtbData(Dataset):
                 return False
         return True
 
-    def __len__(self):
-        return self.number_of_files
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+        """
+        Args:
+            index (int): Index
 
-    def __getitem__(self, idex):
-        img, target = self.data[idex], self.targets[idex]
-        sample = Image.open('./STFT/' + self.files[idx])
-        y = int(self.labels[idx])
-        if self.transform:
-            sample = self.transform(sample)
-        return sample, y
+        Returns:
+            tuple: (image, target) where target is index of the target class.
+        """
+        img, target = self.data[index], self.targets[index]
+
+        # doing this so that it is consistent with all other datasets
+        # to return a PIL Image
+        img = Image.fromarray(img)
+
+        if self.transform is not None:
+            img = self.transform(img)
+
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return img, target
+
+    def __len__(self) -> int:
+        return len(self.data)
 
 
 
