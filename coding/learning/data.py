@@ -26,18 +26,20 @@ bucket = client.get_bucket('ecg-arrhythmia-classification')
 
 
 class PtbData(Dataset):
-    def __init__(self, data_dir, number_of_files,is_train ,transform: Optional[Callable] = None,
+    def __init__(self, data_dir,is_train ,transform: Optional[Callable] = None,
             target_transform: Optional[Callable] = None):
         super().__init__(data_dir,transform=transform,
                                       target_transform=target_transform)
 
         self.is_train = is_train  # training set or test set
-        self.number_of_files=number_of_files
+
 
         if self.train:
             downloaded_list = self.train_list
         else:
             downloaded_list = self.test_list
+
+        self.number_of_files = len(downloaded_list)
 
         self.data: Any = []
         self.targets = []
@@ -113,7 +115,6 @@ class DataModule(pl.LightningDataModule):
         self.state = 'train' if is_train else 'test'
         self.classes = super_classes = ["CD", "HYP", "MI", "NORM", "STTC"]
         self.data_dir = data_dir
-        self.number_of_files=sum([len(os.listdir(f'./STFT/STFT_{x}')) for x in self.classes])
 
         self.transform = transforms.Compose([
             transforms.ToTensor()
@@ -123,9 +124,9 @@ class DataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         # Assign train/val datasets for use in dataloaders
         if stage == 'train' or stage is None:
-            data_full = PtbData(self.data_dir,number_of_files=self.number_of_files, is_train=True)
-            self.train, self.val = random_split(data_full, [round(self.number_of_files * 0.8),
-                                                           self.number_of_files - round(self.number_of_files * 0.8)])
+            data_full = PtbData(self.data_dir, is_train=True)
+            self.train, self.val = random_split(data_full, [round(data_full.number_of_files * 0.8),
+                                                           data_full.number_of_files - round(data_full.number_of_files * 0.8)])
 
         # Assign test dataset for use in dataloader(s)
         if stage == 'test' or stage is None:
