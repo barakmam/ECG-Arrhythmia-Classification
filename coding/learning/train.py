@@ -87,12 +87,6 @@ if __name__=="__main__":
     #     run.log_artifact(artifact)
 
 
-    with open('labels.pickle', 'rb') as handle:
-        labels = pickle.load(handle)
-    label_hist = list(np.unique(labels, return_counts=True))
-    label_hist[1] = label_hist[1] / sum(label_hist[1])
-    plt.hist(labels)
-
 
     # Samples required by the custom ImagePredictionLogger callback to log image predictions.
     val_samples = next(iter(dm.val_dataloader()))
@@ -117,8 +111,7 @@ if __name__=="__main__":
         mode='min')
 
     # Init our model
-    loss_weights = torch.cuda.FloatTensor(label_hist[1])
-    model = PaperNet(input_shape, len(super_classes), device,batch_size,lr,loss_weights,weight_decay)
+    model = PaperNet(input_shape, len(super_classes), device,batch_size,lr,weight_decay)
 
 
     trainer = pl.Trainer(

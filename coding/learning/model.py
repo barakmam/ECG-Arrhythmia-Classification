@@ -11,10 +11,9 @@ import wandb
 
 
 class PaperNet(pl.LightningModule):
-    def __init__(self, input_shape, num_classes, device,batch_size,lr,loss_weights, weight_decay=1.5e-06):
+    def __init__(self, input_shape, num_classes, device,batch_size,lr, weight_decay=1.5e-06):
         super().__init__()
 
-        self.loss_weights=loss_weights
         self.lr=lr
         self.batch_size=batch_size
 
@@ -71,11 +70,11 @@ class PaperNet(pl.LightningModule):
         x, y = batch
         logits = self(x)
 
-        loss = F.nll_loss(logits, y,self.loss_weights)  # , weight=self.loss_weights)
+        loss = F.nll_loss(logits, y)  # , weight=self.loss_weights)
 
         # training metrics
         preds = torch.argmax(logits, dim=1)
-        acc = accuracy(preds, y,self.loss_weights)
+        acc = accuracy(preds, y)
         self.log('train_loss', loss, on_step=True, on_epoch=True, logger=True)
         self.log('train_acc', acc, on_step=True, on_epoch=True, logger=True)
 
@@ -96,7 +95,7 @@ class PaperNet(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = F.nll_loss(logits, y,self.loss_weights)  # weight=self.loss_weights)
+        loss = F.nll_loss(logits, y)  # weight=self.loss_weights)
 
         # validation metrics
         preds = torch.argmax(logits, dim=1)
