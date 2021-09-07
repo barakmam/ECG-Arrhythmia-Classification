@@ -173,19 +173,13 @@ class DataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         # Assign train/val datasets for use in dataloaders
         if stage == 'train' or stage is None:
-            ptb_full = PtbData(self.data_map_url, self.data_url, self.gender, self.under_50, 'train',
-                               transform=self.transform)
             self.train, self.val = random_split(ptb_full, [round(len(ptb_full) * 0.8),
                                                            len(ptb_full) - round(len(ptb_full) * 0.8)])
-            # print('len ptb_full: ', len(ptb_full))
-            # print('len train: ', len(self.train))
-            # print('len val: ', len(self.val))
 
         # Assign test dataset for use in dataloader(s)
         if stage == 'test' or stage is None:
             self.test = PtbData(self.data_map_url, self.data_url, self.gender, self.under_50, 'test',
                                 transform=self.transform)
-            # print('len test: ', len(self.test))
 
     def train_dataloader(self):
         return DataLoader(self.train, batch_size=self.batch_size, shuffle=True)
