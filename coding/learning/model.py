@@ -41,11 +41,11 @@ class PaperNet(pl.LightningModule):
         self.features_num = self._get_conv_output(input_shape)
 
         self.classifier = nn.Sequential(
-            nn.Linear(self.features_num, 1),
-            nn.BatchNorm1d(1),
+            nn.Linear(self.features_num, 32),
+            nn.BatchNorm1d(32),
             nn.ReLU(),
             nn.Dropout(),
-            nn.Linear(1, num_classes),
+            nn.Linear(32, num_classes),
             nn.Softmax(-1)
         ).to(device)
 

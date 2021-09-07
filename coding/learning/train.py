@@ -45,11 +45,11 @@ if __name__=="__main__":
     # Init our data pipeline
     data_dir='./STFT'
     is_train = True
-    batch_size = 8
+    batch_size = 32
     input_shape = (1, 256, 256)
 
     max_epoches=10*80
-    lr = 1
+    lr = 5e-4
     weight_decay = 0.0005
 
     super_classes = np.array(["CD", "HYP", "MI", "NORM", "STTC"])
