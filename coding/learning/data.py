@@ -46,8 +46,7 @@ class DataModule(pl.LightningDataModule):
 
         # Assign test dataset for use in dataloader(s)
         if stage == 'test' or stage is None:
-            self.test = None
-            raise NotImplementedError
+            self.test = ImageFolder(self.data_dir)
 
     def train_dataloader(self):
         return DataLoader(self.train, batch_size=self.batch_size, shuffle=True)
