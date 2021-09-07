@@ -42,7 +42,7 @@ class Blend(Dataset):
         self.X_test = data["X_test"]
         self.X_test_meta = data["X_test_meta"]
         self.y_test = data["y_test"]
-        self.state = 'STFT'  # expected {STFT,permutation,HaarWavelet}
+        self.state = 'HaarWavelet'  # expected {STFT,permutation,HaarWavelet}
         self.bucket = client.get_bucket('ecg-arrhythmia-classification')
 
         # datasttruct
@@ -336,19 +336,20 @@ class Blend(Dataset):
                                 # create the dataset: data+metadata
                                 file_uuided = str(uuid.uuid4())
 
-                                blob = self.bucket.blob('{}/{}.jpeg'.format(self.state, file_uuided))
+                                blob = self.bucket.blob('{}_{}/{}.jpeg'.format(self.state,y, file_uuided))
                                 with open("./myplot.jpeg", 'rb') as f:
                                     blob.upload_from_file(f)
 
-                                pkl_dict[dataset_type][gender][op][single].append("{}/{}.jpeg".format(self.state,file_uuided))
+                                pkl_dict[dataset_type][gender][op][single].append("{}_{}/{}.jpeg".format(self.state,y,file_uuided))
                                 pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
                                     d[dataset_type][gender][op][f"meta_{single}"][index])
 
                                 if self.STFT_show:
                                     plt.show()
 
-                            object_name_in_gcs_bucket = self.bucket.blob('data_map:{}'.format(self.state))
+                            object_name_in_gcs_bucket = self.bucket.blob('data_map_folders:{}'.format(self.state))
                             object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
+
                     elif self.state == "HaarWavelet":
                         length = len(d[dataset_type][gender][op]["A"])
                         for index in range(length):
@@ -371,14 +372,14 @@ class Blend(Dataset):
 
                                 file_uuided = str(uuid.uuid4())
 
-                                object_name_in_gcs_bucket=self.bucket.blob('{}/{}'.format(self.state,file_uuided))
+                                object_name_in_gcs_bucket=self.bucket.blob('{}_{}/{}'.format(self.state,y,file_uuided))
                                 object_name_in_gcs_bucket.upload_from_string(str(mat))
 
-                                pkl_dict[dataset_type][gender][op][single].append("{}/{}".format(self.state,file_uuided))
+                                pkl_dict[dataset_type][gender][op][single].append("{}_{}/{}".format(self.state,y,file_uuided))
                                 pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
                                     d[dataset_type][gender][op][f"meta_{single}"][index])
 
-                        object_name_in_gcs_bucket = self.bucket.blob('data_map:{}'.format(self.state))
+                        object_name_in_gcs_bucket = self.bucket.blob('data_map_folders:{}'.format(self.state))
                         object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
 
                     else:
