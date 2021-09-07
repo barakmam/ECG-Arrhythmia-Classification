@@ -33,6 +33,7 @@ class DataModule(pl.LightningDataModule):
         self.data_dir = data_dir
 
         self.transform = transforms.Compose([
+            transforms.Grayscale(),
             transforms.ToTensor()
         ])
 
