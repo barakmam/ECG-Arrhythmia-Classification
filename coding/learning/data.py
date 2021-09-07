@@ -12,7 +12,7 @@ import pickle
 from torchvision import transforms
 from typing import Any, Callable, Optional, Tuple
 from torch.utils.data import DataLoader, random_split, Dataset
-from torch.utils import check_integrity
+from torchvision.datasets.utils import check_integrity
 import random
 
 
