@@ -26,8 +26,10 @@ bucket = client.get_bucket('ecg-arrhythmia-classification')
 
 
 class PtbData(Dataset):
-    def __init__(self, data_dir, number_of_files,is_train):
-        super().__init__(data_dir)
+    def __init__(self, data_dir, number_of_files,is_train ,transform: Optional[Callable] = None,
+            target_transform: Optional[Callable] = None):
+        super().__init__(data_dir,transform=transform,
+                                      target_transform=target_transform)
 
         self.is_train = is_train  # training set or test set
         self.number_of_files=number_of_files
