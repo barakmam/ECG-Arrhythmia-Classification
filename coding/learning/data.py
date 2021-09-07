@@ -40,7 +40,7 @@ class DataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         # Assign train/val datasets for use in dataloaders
         if stage == 'train' or stage is None:
-            data_full = ImageFolder(self.data_dir,transforms=self.transform)
+            data_full = ImageFolder(self.data_dir,transform=self.transform)
             self.train, self.val = random_split(data_full, [round(len(data_full) * 0.8),
                                                            len(data_full)- round(len(data_full) * 0.8)])
 
