@@ -123,7 +123,7 @@ class DataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         # Assign train/val datasets for use in dataloaders
         if stage == 'train' or stage is None:
-            data_full = PtbData(self.data_dir,number_of_files=self.number_of_files, train=True)
+            data_full = PtbData(self.data_dir,number_of_files=self.number_of_files, is_train=True)
             self.train, self.val = random_split(data_full, [round(self.number_of_files * 0.8),
                                                            self.number_of_files - round(self.number_of_files * 0.8)])
 
