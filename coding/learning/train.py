@@ -43,13 +43,8 @@ if __name__=="__main__":
 
 
     # Init our data pipeline
-    data_map_url = "data_map:STFT"
-    data_url = "STFT"
-    gender = "male"
-    under_50 = False
+    files_root='./STFT'
     is_train = True
-    state = 'train'
-
     batch_size = 8
     input_shape = (1, 256, 256)
 
@@ -58,8 +53,7 @@ if __name__=="__main__":
     weight_decay = 0.0005
 
     super_classes = np.array(["CD", "HYP", "MI", "NORM", "STTC"])
-    dm = DataModule(batch_size, data_map_url, data_url, gender, under_50, is_train)
-    dm.prepare_data()
+    dm = DataModule(batch_size, is_train, files_root=files_root)
     dm.setup()
 
     #wandb init
