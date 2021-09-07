@@ -48,8 +48,7 @@ class DataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         # Assign train/val datasets for use in dataloaders
         if stage == 'train' or stage is None:
-            self.train, self.val = random_split(self.files_root, [round(self.number_of_files * 0.8),
-                                                           self.number_of_files - round(self.number_of_files * 0.8)])
+            self.train, self.val = random_split(self.files_root)
 
         # Assign test dataset for use in dataloader(s)
         if stage == 'test' or stage is None:
