@@ -84,7 +84,7 @@ class PaperNet(pl.LightningModule):
         x, y = batch
         logits = self(x)
 
-        loss = F.nll_loss(logits, y,self.loss_weights)  # , weight=self.loss_weights)
+        loss = F.nll_loss(logits, y)  # , weight=self.loss_weights)
         # validation metrics
         preds = torch.argmax(logits, dim=1)
         acc = accuracy(preds, y)
