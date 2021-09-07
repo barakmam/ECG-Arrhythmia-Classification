@@ -11,7 +11,8 @@ from google.cloud import storage
 import pickle
 from torchvision import transforms
 from typing import Any, Callable, Optional, Tuple
-from torch.utils.data import DataLoader, random_split, Dataset
+from torch.utils.data import DataLoader, random_split
+from torchvision.datasets.vision import VisionDataset
 from torchvision.datasets.utils import check_integrity
 import random
 
@@ -25,7 +26,7 @@ client = storage.Client.from_service_account_json(json_credentials_path='model-a
 bucket = client.get_bucket('ecg-arrhythmia-classification')
 
 
-class PtbData(Dataset):
+class PtbData(VisionDataset):
     def __init__(self, data_dir,is_train ,transform: Optional[Callable] = None,
             target_transform: Optional[Callable] = None):
         super().__init__(data_dir,transform=transform,
