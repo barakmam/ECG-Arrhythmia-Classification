@@ -10,7 +10,9 @@ import wandb
 from google.cloud import storage
 import pickle
 from torchvision import transforms
+from typing import Any, Callable, Optional, Tuple
 from torch.utils.data import DataLoader, random_split, Dataset
+from torch.utils import check_integrity
 import random
 
 
@@ -23,10 +25,67 @@ client = storage.Client.from_service_account_json(json_credentials_path='model-a
 bucket = client.get_bucket('ecg-arrhythmia-classification')
 
 
-class Pattern():
-    def __init__(self, enc, percent):
-        self.enc = enc
-        self.percent = percent
+class PtbData(Dataset):
+    def __init__(self, data_dir, number_of_files,is_train):
+        super().__init__(data_dir)
+
+        self.is_train = is_train  # training set or test set
+        self.number_of_files=number_of_files
+
+        if self.train:
+            downloaded_list = self.train_list
+        else:
+            downloaded_list = self.test_list
+
+        self.data: Any = []
+        self.targets = []
+
+        # now load the picked numpy arrays
+        for file_name, checksum in downloaded_list:
+            file_path = os.path.join(self.root, self.base_folder, file_name)
+            with open(file_path, 'rb') as f:
+                entry = pickle.load(f, encoding='latin1')
+                self.data.append(entry['data'])
+                if 'labels' in entry:
+                    self.targets.extend(entry['labels'])
+                else:
+                    self.targets.extend(entry['fine_labels'])
+
+        self.data = np.vstack(self.data).reshape(-1, 3, 32, 32)
+        self.data = self.data.transpose((0, 2, 3, 1))  # convert to HWC
+
+        self._load_meta()
+
+    def _load_meta(self) -> None:
+        path = os.path.join(self.root, self.base_folder, self.meta['filename'])
+        if not check_integrity(path, self.meta['md5']):
+            raise RuntimeError('Dataset metadata file not found or corrupted.' +
+                               ' You can use download=True to download it')
+        with open(path, 'rb') as infile:
+            data = pickle.load(infile, encoding='latin1')
+            self.classes = data[self.meta['key']]
+        self.class_to_idx = {_class: i for i, _class in enumerate(self.classes)}
+
+
+    def _check_integrity(self) -> bool:
+        root = self.root
+        for fentry in (self.train_list + self.test_list):
+            filename, md5 = fentry[0], fentry[1]
+            fpath = os.path.join(root, self.base_folder, filename)
+            if not check_integrity(fpath, md5):
+                return False
+        return True
+
+    def __len__(self):
+        return self.number_of_files
+
+    def __getitem__(self, idex):
+        img, target = self.data[idex], self.targets[idex]
+        sample = Image.open('./STFT/' + self.files[idx])
+        y = int(self.labels[idx])
+        if self.transform:
+            sample = self.transform(sample)
+        return sample, y
 
 
 
@@ -48,7 +107,7 @@ class DataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         # Assign train/val datasets for use in dataloaders
         if stage == 'train' or stage is None:
-            data_full = Dataset(self.data_dir, train=True, transform=self.transform)
+            data_full = PtbData(self.data_dir,number_of_files=self.number_of_files, train=True)
             self.train, self.val = random_split(data_full, [round(self.number_of_files * 0.8),
                                                            self.number_of_files - round(self.number_of_files * 0.8)])
 
