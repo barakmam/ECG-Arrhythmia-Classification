@@ -24,28 +24,31 @@ class PaperNet(pl.LightningModule):
 
 
         self.features = nn.Sequential(
-            nn.Conv2d(1, 8, 4),
+            nn.Conv2d(1, 8, 5),
             nn.BatchNorm2d(8),
             nn.ReLU(),
+            nn.Dropout(),
             nn.MaxPool2d(2),
-            nn.Conv2d(8, 13, 2),
+            nn.Conv2d(8, 13, 3),
             nn.BatchNorm2d(13),
             nn.ReLU(),
+            nn.Dropout(),
             nn.MaxPool2d(2),
-            nn.Conv2d(13, 13, 2),
+            nn.Conv2d(13, 13, 3),
             nn.BatchNorm2d(13),
             nn.ReLU(),
+            nn.Dropout(),
             nn.MaxPool2d(2)
         ).to(device)
 
         self.features_num = self._get_conv_output(input_shape)
 
         self.classifier = nn.Sequential(
-            nn.Linear(self.features_num, 32),
-            nn.BatchNorm1d(32),
+            nn.Linear(self.features_num, 8),
+            nn.BatchNorm1d(8),
             nn.ReLU(),
             nn.Dropout(),
-            nn.Linear(32, num_classes),
+            nn.Linear(8, num_classes),
             nn.Softmax(-1)
         ).to(device)
 
@@ -113,8 +116,8 @@ class PaperNet(pl.LightningModule):
         # lr_scheduler = {'scheduler': torch.optim.lr_scheduler.MultiStepLR(
         #     optimizer,milestones=[5,10]),
         # }
-        return [optimizer],[lr_scheduler]
-
+        # return [optimizer],[lr_scheduler]
+        return optimizer
 
 
 class ImagePredictionLogger(Callback):
