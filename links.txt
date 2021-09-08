@@ -10,7 +10,7 @@ kaggle: https://www.kaggle.com/shayanfazeli/heartbeat
 Overleaf:
 https://www.overleaf.com/4713153523cdsbvhfmxnjm
 
-wavelet artocle: file:///C:/Users/%D7%91%D7%A8%D7%A7/Downloads/entropy-18-00285-v2.pdf
+wavelet article: file:///C:/Users/%D7%91%D7%A8%D7%A7/Downloads/entropy-18-00285-v2.pdf
 
 Google Cloud: https://console.cloud.google.com/storage/browser/_details/ecg-arrhythmia-classification/data_map?project=model-azimuth-321409
 data_map: https://storage.cloud.google.com/ecg-arrhythmia-classification/data_map
