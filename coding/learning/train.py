@@ -43,23 +43,17 @@ if __name__=="__main__":
 
 
     # Init our data pipeline
-    data_map_url = "data_map:STFT"
-    data_url = "STFT"
-    gender = "male"
-    under_50 = False
+    data_dir='./STFT'
     is_train = True
-    state = 'train'
-
-    batch_size = 8
+    batch_size = 32
     input_shape = (1, 256, 256)
 
     max_epoches=10*80
-    lr = 1
+    lr = 5e-4
     weight_decay = 0.0005
 
     super_classes = np.array(["CD", "HYP", "MI", "NORM", "STTC"])
-    dm = DataModule(batch_size, data_map_url, data_url, gender, under_50, is_train)
-    dm.prepare_data()
+    dm = DataModule(batch_size, is_train, data_dir=data_dir)
     dm.setup()
 
     #wandb init
@@ -93,12 +87,6 @@ if __name__=="__main__":
     #     run.log_artifact(artifact)
 
 
-    with open('labels.pickle', 'rb') as handle:
-        labels = pickle.load(handle)
-    label_hist = list(np.unique(labels, return_counts=True))
-    label_hist[1] = label_hist[1] / sum(label_hist[1])
-    plt.hist(labels)
-
 
     # Samples required by the custom ImagePredictionLogger callback to log image predictions.
     val_samples = next(iter(dm.val_dataloader()))
@@ -123,8 +111,7 @@ if __name__=="__main__":
         mode='min')
 
     # Init our model
-    loss_weights = torch.cuda.FloatTensor(label_hist[1])
-    model = PaperNet(input_shape, len(super_classes), device,batch_size,lr,loss_weights,weight_decay)
+    model = PaperNet(input_shape, len(super_classes), device,batch_size,lr,weight_decay)
 
 
     trainer = pl.Trainer(

@@ -11,10 +11,9 @@ import wandb
 
 
 class PaperNet(pl.LightningModule):
-    def __init__(self, input_shape, num_classes, device,batch_size,lr,loss_weights, weight_decay=1.5e-06):
+    def __init__(self, input_shape, num_classes, device,batch_size,lr, weight_decay=1.5e-06):
         super().__init__()
 
-        self.loss_weights=loss_weights
         self.lr=lr
         self.batch_size=batch_size
 
@@ -25,28 +24,31 @@ class PaperNet(pl.LightningModule):
 
 
         self.features = nn.Sequential(
-            nn.Conv2d(1, 8, 4),
+            nn.Conv2d(1, 8, 5),
             nn.BatchNorm2d(8),
             nn.ReLU(),
+            nn.Dropout(),
             nn.MaxPool2d(2),
-            nn.Conv2d(8, 13, 2),
+            nn.Conv2d(8, 13, 3),
             nn.BatchNorm2d(13),
             nn.ReLU(),
+            nn.Dropout(),
             nn.MaxPool2d(2),
-            nn.Conv2d(13, 13, 2),
+            nn.Conv2d(13, 13, 3),
             nn.BatchNorm2d(13),
             nn.ReLU(),
+            nn.Dropout(),
             nn.MaxPool2d(2)
         ).to(device)
 
         self.features_num = self._get_conv_output(input_shape)
 
         self.classifier = nn.Sequential(
-            nn.Linear(self.features_num, 1),
-            nn.BatchNorm1d(1),
+            nn.Linear(self.features_num, 8),
+            nn.BatchNorm1d(8),
             nn.ReLU(),
             nn.Dropout(),
-            nn.Linear(1, num_classes),
+            nn.Linear(8, num_classes),
             nn.Softmax(-1)
         ).to(device)
 
@@ -71,11 +73,11 @@ class PaperNet(pl.LightningModule):
         x, y = batch
         logits = self(x)
 
-        loss = F.nll_loss(logits, y,self.loss_weights)  # , weight=self.loss_weights)
+        loss = F.nll_loss(logits, y)  # , weight=self.loss_weights)
 
         # training metrics
         preds = torch.argmax(logits, dim=1)
-        acc = accuracy(preds, y,self.loss_weights)
+        acc = accuracy(preds, y)
         self.log('train_loss', loss, on_step=True, on_epoch=True, logger=True)
         self.log('train_acc', acc, on_step=True, on_epoch=True, logger=True)
 
@@ -85,7 +87,7 @@ class PaperNet(pl.LightningModule):
         x, y = batch
         logits = self(x)
 
-        loss = F.nll_loss(logits, y,self.loss_weights)  # , weight=self.loss_weights)
+        loss = F.nll_loss(logits, y)  # , weight=self.loss_weights)
         # validation metrics
         preds = torch.argmax(logits, dim=1)
         acc = accuracy(preds, y)
@@ -96,7 +98,7 @@ class PaperNet(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = F.nll_loss(logits, y,self.loss_weights)  # weight=self.loss_weights)
+        loss = F.nll_loss(logits, y)  # weight=self.loss_weights)
 
         # validation metrics
         preds = torch.argmax(logits, dim=1)
@@ -114,8 +116,8 @@ class PaperNet(pl.LightningModule):
         # lr_scheduler = {'scheduler': torch.optim.lr_scheduler.MultiStepLR(
         #     optimizer,milestones=[5,10]),
         # }
-        return [optimizer],[lr_scheduler]
-
+        # return [optimizer],[lr_scheduler]
+        return optimizer
 
 
 class ImagePredictionLogger(Callback):
