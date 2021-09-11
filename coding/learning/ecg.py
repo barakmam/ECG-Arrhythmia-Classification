@@ -9,16 +9,12 @@ Original file is located at
 ## Imports
 """
 
-import io
+import glob
 import PIL.Image as Image
-import ast
 import os
-
 from torchvision.datasets import ImageFolder
-from tqdm import tqdm
 import matplotlib.pyplot as plt
 import torch
-import torchvision
 import numpy as np
 from torch import nn
 import torch.nn.functional as F
@@ -27,9 +23,13 @@ from pytorch_lightning.callbacks import Callback, ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.metrics.functional import accuracy
 from pytorch_lightning.loggers import TensorBoardLogger
-import pickle
 from torchvision import transforms
 from torch.utils.data import DataLoader, random_split, Dataset
+from torchvision.models import resnet18
+import wfdb
+import ast
+import pandas as pd
+import pickle
 
 # setting device on GPU if available, else CPU
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -44,103 +44,127 @@ np.random.seed(seed)
 
 """## Data"""
 
-# Setting credentials using the downloaded JSON file
-# path = '/Users/barakm/Desktop/TAU/signal_processing/ECG-Arrhythmia-Classification/model-azimuth-321409-241148a4b144.json' # 'model-azimuth-321409-241148a4b144.json'
-# if not os.path.isfile(path):
-#     raise ("Please provide the gcs key in the root directory")
-# # client = storage.Client.from_service_account_json(json_credentials_path=path)
-# client = storage.Client.from_service_account_json(json_credentials_path=path)
-# bucket = client.get_bucket('ecg-arrhythmia-classification')
 
-# from torchvision.datasets.cifar import CIFAR10
+class OriginalData(Dataset):
+    def __init__(self, path, transform=None):
 
-# class PtbData(Dataset):
-#
-#     def __init__(self, data_map_url, gender, under_50, is_train, download=False, transform=None):
-#         """
-#         Args:
-#
-#         """
-#
-#         self.gender = gender
-#         self.under_50 = under_50
-#         self.transform = transform
-#         self.state = 'train' if is_train else 'test'
-#
-#         if download:
-#             blob_obj = bucket.blob(data_map_url)
-#             self.data_map = ast.literal_eval(blob_obj.download_as_string().decode('utf-8'))
-#             self.data_map[self.state][self.gender][self.under_50]['A'] +=\
-#                self.data_map[self.state][self.gender][self.under_50]['B'] +\
-#                self.data_map[self.state][self.gender]['>=' if self.under_50 else '<']['A'] +\
-#                self.data_map[self.state][self.gender]['>=' if self.under_50 else '<']['B']
-#
-#             self.data_map[self.state][self.gender][self.under_50]['Y_A'] +=\
-#                self.data_map[self.state][self.gender][self.under_50]['Y_B']+\
-#                self.data_map[self.state][self.gender]['>=' if self.under_50 else '<']['Y_A'] +\
-#                self.data_map[self.state][self.gender]['>=' if self.under_50 else '<']['Y_B']
-#
-#             self.data_map[self.state][self.gender][self.under_50]['meta_A'] +=\
-#                self.data_map[self.state][self.gender][self.under_50]['meta_B'] +\
-#                self.data_map[self.state][self.gender]['>=' if self.under_50 else '<']['meta_A'] +\
-#                self.data_map[self.state][self.gender]['>=' if self.under_50 else '<']['meta_B']
-#
-#             if not os.path.isdir('./images') or len(os.listdir('./images')) < 1:
-#                 os.mkdir('./images')
-#                 self.labels = []
-#                 label_count = np.unique(self.data_map[self.state][self.gender][self.under_50]['Y_A'], return_counts=True)
-#                 num_samples_each_class = 3*np.min(label_count[1])
-#                 class_count = np.zeros(len(label_count[0]))
-#                 catagory_data_len = len(self.data_map[self.state][self.gender][self.under_50]['A'])
-#                 for ii in tqdm(np.random.permutation(catagory_data_len)):
-#                     label = self.data_map[self.state][self.gender][self.under_50]['Y_A'][ii]
-#                     if class_count[label] >= num_samples_each_class:
-#                         continue
-#                     class_count[label] += 1
-#                     blob_obj = bucket.blob("{}".format(self.data_map[self.state][self.gender][self.under_50]['A'][ii]))
-#                     sample = Image.open(io.BytesIO(blob_obj.download_as_bytes())).convert('L')
-#                     age = int(self.data_map[self.state][self.gender][self.under_50]['meta_A'][ii]['age'])
-#                     sex = self.data_map[self.state][self.gender][self.under_50]['meta_A'][ii]['sex']
-#
-#                     sample.save('./images/' + str(ii) + '_label_' + str(label) + '_age' + str(age) + '_sex' + str(sex) + '.jpeg')
-#                     self.labels.append(label)
-#
-#                     if np.all(class_count >= num_samples_each_class):
-#                         break
-#
-#                 with open('labels.pickle', 'wb') as handle:
-#                     pickle.dump(self.labels, handle, protocol=pickle.HIGHEST_PROTOCOL)
-#
-#             self.files = os.listdir('./images')
-#             with open('data_map.pickle', 'wb') as handle:
-#                 pickle.dump(self.data_map, handle, protocol=pickle.HIGHEST_PROTOCOL)
-#
-#         else:
-#             self.files = os.listdir('./images')
-#             with open('data_map.pickle', 'rb') as handle:
-#                 self.data_map = pickle.load(handle)
-#
-#         with open('labels.pickle', 'rb') as handle:
-#             self.labels = pickle.load(handle)
-#
-#     def __len__(self):
-#         # len(self.data_map[self.state][self.gender][self.under_50]['A']) # +\
-#         # len(self.data_map[self.state][self.gender][self.under_50]['B'])
-#         return len(self.files)
-#
-#     def __getitem__(self, idx):
-#         # blob_obj = bucket.blob("{}".format(self.data_map[self.state][self.gender][self.under_50]['A'][idx]))
-#         # sample = pickle.loads(blob_obj.download_as_bytes())
-#         # sample = Image.open(io.BytesIO(blob_obj.download_as_bytes())).convert('L')
-#         sample = Image.open('./images/' + self.files[idx])
-#         # y = self.data_map[self.state][self.gender][self.under_50]['Y_A'][idx]
-#         y = int(self.files[idx].split('label_')[1].split('_')[0])
-#         if self.transform:
-#             sample = self.transform(sample)
-#         return sample, y
+        # # load and convert annotation data
+        # Y = pd.read_csv(path + 'ptbxl_database.csv', index_col='ecg_id')
+        # Y.scp_codes = Y.scp_codes.apply(lambda x: ast.literal_eval(x))
+        #
+        # # Load raw signal data
+        # sampling_rate = 100
+        # X = self.load_raw_data(Y, sampling_rate, path)
+        #
+        # # Load scp_statements.csv for diagnostic aggregation
+        self.agg_df = pd.read_csv(path + 'scp_statements.csv', index_col=0)
+        self.agg_df = self.agg_df[self.agg_df.diagnostic == 1]
 
 
-class STFT(pl.LightningDataModule):
+        # with open(path + 'Y_metadata.pickle', 'wb') as handle:
+        #     pickle.dump(Y, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+        with open(path + 'signals.pickle', 'rb') as handle:
+            X = pickle.load(handle)
+        with open(path + 'Y_metadata.pickle', 'rb') as handle:
+            Y = pickle.load(handle)
+
+        classes_dict = {"CD": 0, "HYP": 1, "MI": 2, "NORM": 3, "STTC": 4}
+        # Apply diagnostic superclass
+        Y['diagnostic_superclass'] = Y.scp_codes.apply(self.aggregate_diagnostic)
+        Ya = Y['diagnostic_superclass'].to_numpy()
+        Yb = np.array([classes_dict[y[0]] if len(y) == 1 else None for y in Ya])
+
+        max_inds_per_class = 2500
+        dataset_inds = []
+        for curr_class in classes_dict.values():
+            class_inds = np.where(Yb == curr_class)[0]
+            np.random.shuffle(class_inds)
+            dataset_inds.extend(class_inds[:max_inds_per_class])
+        dataset_inds = np.array(dataset_inds)
+
+        self.data = X[dataset_inds, 0, :]  # take only the 0 measurement for now
+        self.targets = torch.LongTensor(Yb[dataset_inds].astype(np.int8))
+
+        # proper_label_inds = np.where(Yb != None)[0]
+        # self.data = X[proper_label_inds, 0, :]  # take only the 0 measurement for now
+        # self.targets = torch.LongTensor(Yb[proper_label_inds].astype(np.int8))
+
+        # Split data into train and test
+        # test_fold = 10
+        # Train
+        # X_train = X[np.where(Y.strat_fold != test_fold)]
+        # y_train = Y[(Y.strat_fold != test_fold)].diagnostic_superclass
+        # Test
+        # X_test = X[np.where(Y.strat_fold == test_fold)]
+        # y_test = Y[Y.strat_fold == test_fold].diagnostic_superclass
+        # y_single_label = []
+
+        # self.data = X_train
+        # self.targets = torch.LongTensor(y_train)
+        self.transform = transform
+
+    def __getitem__(self, index):
+        x = self.data[index]
+        y = self.targets[index]
+
+        x = torch.Tensor(x)
+        x = (x - x.mean())/torch.std(x)
+        # if self.transform:
+        #     x = self.transform(x)
+
+        return x, y
+
+    def __len__(self):
+        return len(self.data)
+
+    def load_raw_data(self, df, sampling_rate, path):
+        if sampling_rate == 100:
+            data = [wfdb.rdsamp(path + f) for f in df.filename_lr]
+        else:
+            data = [wfdb.rdsamp(path + f) for f in df.filename_hr]
+        data = np.array([signal for signal, meta in data])
+        return data
+
+    def aggregate_diagnostic(self, y_dic):
+        tmp = []
+        for key in y_dic.keys():
+            if key in self.agg_df.index:
+                tmp.append(self.agg_df.loc[key].diagnostic_class)
+        return list(set(tmp))
+
+
+class WaveletData(Dataset):
+    def __init__(self, path, transform=None):
+        classes_names = os.listdir(path)
+        self.data = []
+        self.targets = []
+        for ii, curr_class in enumerate(classes_names):
+            file_name = glob.glob(os.path.join(path, curr_class, '*'))
+            np.random.shuffle(file_name)
+            file_name = file_name[:4000]
+            self.targets.extend([ii]*len(file_name))
+            self.data.extend(file_name)
+
+        self.targets = torch.LongTensor(self.targets)
+        self.transform = transform
+
+    def __getitem__(self, index):
+        x = loader(self.data[index])
+        y = self.targets[index]
+
+        x = torch.Tensor(x)
+        # x = (x - x.mean())/torch.std(x)
+        # if self.transform:
+        #     x = self.transform(x)
+
+        return x, y
+
+    def __len__(self):
+        return len(self.data)
+
+
+class STFTDataModule(pl.LightningDataModule):
     def __init__(self, batch_size, image_folder_path, transform=None):
         super().__init__()
 
@@ -187,33 +211,29 @@ class STFT(pl.LightningDataModule):
         return DataLoader(self.test, batch_size=self.batch_size, num_workers=4)
 
 
-class Wavelet(pl.LightningDataModule):
-    def __init__(self, batch_size, image_folder_path, transform=None):
+class OneDimDataModule(pl.LightningDataModule):
+    def __init__(self, batch_size, folder_path, transform=None):
         super().__init__()
 
         self.batch_size = batch_size
-        self.image_folder_path = image_folder_path
+        self.folder_path = folder_path
 
         self.transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Grayscale(num_output_channels=1),
-            transforms.Normalize((0.5), (0.5))
+            transforms.ToTensor()#,
+            # transforms.Grayscale(num_output_channels=1),
+            # transforms.Normalize((0.5), (0.5))
         ])
 
     def prepare_data(self):
-        # download
-        # PtbData(self.data_map_url, self.gender, self.under_50, self.state, download=True, transform=self.transform)
         pass
 
     def setup(self, stage=None):
         # Assign train/val datasets for use in dataloaders
-        dataset = ImageFolder(self.image_folder_path, self.transform)
+        dataset = self.get_data(mode)
         if stage == 'train' or stage is None:
             self.train, self.val = random_split(dataset,
                                                 [int(len(dataset)*0.8),
                                                  len(dataset) - int(len(dataset)*0.8)])
-            # ptb_full = PtbData(self.data_map_url, self.gender, self.under_50, 'train', transform=self.transform)
-            # self.train, self.val = random_split(ptb_full, [round(len(ptb_full)*0.85), len(ptb_full) - round(len(ptb_full)*0.85)])
             print('len all data: ', len(dataset))
             print('len train: ', len(self.train))
             print('len val: ', len(self.val))
@@ -221,7 +241,6 @@ class Wavelet(pl.LightningDataModule):
         # Assign test dataset for use in dataloader(s)
         if stage == 'test' or stage is None:
             self.test = dataset if stage == 'test' else self.val
-            # self.test = PtbData(self.data_map_url, self.gender, self.under_50, 'test', transform=self.transform)
             print('len test: ', len(self.test))
 
     def train_dataloader(self):
@@ -233,12 +252,16 @@ class Wavelet(pl.LightningDataModule):
     def test_dataloader(self):
         return DataLoader(self.test, batch_size=self.batch_size, num_workers=4)
 
-def loader(path):
+    def get_data(self, mode):
+        if mode in ('Hwavelet', 'Dwavelet'):
+            return WaveletData(self.folder_path, self.transform)
+        else:
+            return OriginalData(self.folder_path, self.transform)
 
 
 class PaperNet(pl.LightningModule):
     """## Model"""
-    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob=0):
+    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob=0, num_features_fc=13):
         super().__init__()
 
         # log hyper-parameters
@@ -247,9 +270,11 @@ class PaperNet(pl.LightningModule):
         self.weight_decay = weight_decay
         self.batch_size = batch_size
         self.drop_prob = drop_prob
-        self.num_features_fc = 15
+        self.num_features_fc = num_features_fc
+        # self.device = device
         self.save_hyperparameters()
 
+        self.pre_process = self.get_pre_process().to(device)
         self.features = nn.Sequential(
             nn.Conv2d(1, 8, 4),
             nn.BatchNorm2d(8),
@@ -281,11 +306,15 @@ class PaperNet(pl.LightningModule):
         batch_size = 1
         input = torch.autograd.Variable(torch.rand(batch_size, *shape)).cuda()
 
-        output_feat = self.features(input)
+        output_feat = self.features(self.pre_process(input))
         n_size = output_feat.data.view(batch_size, -1).size(1)
         return n_size
 
+    def get_pre_process(self):
+        return nn.Identity()
+
     def forward(self, x):
+        x = self.pre_process(x)
         x = self.features(x)
         x = x.view(x.size(0), -1)
         x = self.classifier(x)
@@ -385,48 +414,103 @@ class PaperNet(pl.LightningModule):
         return optimizer
 
 
-class Net1(PaperNet):
-    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size):
-        super().__init__(input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size)
-
+class OneDimNet(PaperNet):
+    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num):
+        super().__init__(input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num)
+        features = feature_num
         self.features = nn.Sequential(
-            nn.Conv2d(1, 64, 4),
-            nn.BatchNorm2d(64),
-            nn.Dropout2d(p=0.2),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(64, 128, 2),
-            nn.BatchNorm2d(128),
-            nn.Dropout2d(p=0.2),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(128, 128, 2),
-            nn.BatchNorm2d(128),
-            nn.Dropout2d(p=0.2),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(128, 64, 2),
-            nn.BatchNorm2d(64),
-            nn.Dropout2d(p=0.2),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(64, 32, 2),
-            nn.BatchNorm2d(32),
-            nn.Dropout2d(p=0.2),
-            nn.ReLU(),
-            nn.MaxPool2d(2)
-        ).to(device)
-
-        self.features_num = self._get_conv_output(input_shape)
+            nn.Linear(input_shape[1], features),
+            nn.BatchNorm1d(features),
+            nn.Dropout2d(p=drop_prob),
+            nn.LeakyReLU(),
+            # nn.MaxPool1d(2),
+            # nn.Linear(features, features),
+            # nn.BatchNorm1d(features),
+            # nn.Dropout2d(p=drop_prob),
+            # nn.LeakyReLU(),
+            # nn.Linear(features, features),
+            # nn.BatchNorm1d(features),
+            # nn.Dropout2d(p=drop_prob),
+            # nn.LeakyReLU(),
+            nn.Linear(features, features),
+            nn.BatchNorm1d(features),
+            nn.Dropout2d(p=drop_prob),
+            nn.LeakyReLU()
+        )
 
         self.classifier = nn.Sequential(
-            nn.Linear(self.features_num, 128),
-            nn.BatchNorm1d(128),
-            nn.Dropout2d(p=0.3),
-            nn.ReLU(),
-            nn.Linear(128, num_classes),
+            # nn.MaxPool1d(2),
+            nn.Linear(features, features),
+            nn.BatchNorm1d(features),
+            nn.Dropout2d(p=drop_prob),
+            nn.LeakyReLU(),
+            # nn.MaxPool1d(2),
+            nn.Linear(features, features),
+            nn.BatchNorm1d(features),
+            nn.Dropout2d(p=drop_prob),
+            nn.LeakyReLU(),
+            # nn.MaxPool1d(2),
+            nn.Linear(features, num_classes),
             nn.Softmax(-1)
-        ).to(device)
+        )
+
+    def forward(self, x):
+        # x = x.view(x.size(0), -1)
+        x = self.features(x)
+        x = self.classifier(x)
+        return x
+
+    def _get_conv_output(self, shape):
+        return 10  # irrelevant uint
+
+
+class OneDimConvNet(PaperNet):
+    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num):
+        super().__init__(input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num)
+
+    def forward(self, x):
+        x = self.pre_process(x.unsqueeze(1)).unsqueeze(1)
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        x = self.classifier(x)
+        return x
+
+    def _get_conv_output(self, shape):
+        batch_size = 1
+        input = torch.autograd.Variable(torch.rand(batch_size, *shape)).cuda()
+
+        output_feat = self.features(self.pre_process(input).unsqueeze(0))
+        n_size = output_feat.data.view(batch_size, -1).size(1)
+        return n_size
+
+    def get_pre_process(self):
+        return nn.Conv1d(1, 32, 5, 2)
+
+
+class ResNet(PaperNet):
+    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num):
+        super().__init__(input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num)
+
+        self.resnet = resnet18(num_classes=num_classes)
+
+    def forward(self, x):
+        x = self.pre_process(x.unsqueeze(1)).unsqueeze(1)
+        # x =
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        x = self.classifier(x)
+        return x
+
+    def _get_conv_output(self, shape):
+        batch_size = 1
+        input = torch.autograd.Variable(torch.rand(batch_size, *shape)).cuda()
+
+        output_feat = self.features(self.pre_process(input).unsqueeze(0))
+        n_size = output_feat.data.view(batch_size, -1).size(1)
+        return n_size
+
+    def get_pre_process(self):
+        return nn.Conv1d(1, 256, 3, 1)
 
 
 class ImagePredictionLogger(Callback):
@@ -439,7 +523,7 @@ class ImagePredictionLogger(Callback):
     def on_validation_epoch_end(self, trainer, pl_module):
         # Bring the tensors to CPU
         val_imgs = self.val_imgs.to(device=pl_module.device)
-        val_labels = self.classes_names[self.val_labels]#.to(device=pl_module.device)
+        val_labels = self.classes_names[self.val_labels]
         # Get model prediction
         logits = pl_module(val_imgs)
         preds = self.classes_names[torch.argmax(logits, -1).cpu()]
@@ -465,103 +549,122 @@ def image_grid(images, labels, preds):
         plt.title('label: ' + y + '. pred: ' + pred)
         plt.xticks([])
         plt.yticks([])
-        plt.grid(False)
-        plt.imshow(x[0].cpu().numpy(), cmap=plt.cm.coolwarm)
+        if x.dim() == 3:
+            plt.grid(False)
+            plt.imshow(x[0].cpu().numpy(), cmap=plt.cm.coolwarm)
+        else:
+            plt.grid()
+            plt.plot(x.cpu().numpy())
 
     return figure
 
-# class OneDimNet()
-#     def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate, weight_decay):
-#         super().__init__(input_shape, num_classes, loss_weights, device, learning_rate, weight_decay)
-#         self.features = nn.Sequencial(
-#             nn.Linear(input_shape[1]*input_shape[2], 64),
-#             nn.BatchNorm1d(64),
-#             nn.Dropout2d(p=0.3),
-#             nn.ReLU(),
-#             nn.Linear(64, 32),
-#             nn.BatchNorm1d(32),
-#             nn.Dropout2d(p=0.3),
-#             nn.ReLU()
-#         )
 
-#         self.classifier = nn.Sequencial(
-#             nn.Linear(32, 32),
-#             nn.BatchNorm1d(32),
-#             nn.Dropout2d(p=0.3),
-#             nn.ReLU(),
-#             nn.Linear(32, 32),
-#             nn.BatchNorm1d(32),
-#             nn.Dropout2d(p=0.3),
-#             nn.ReLU(),
-#             nn.Linear(32, 32),
-#             nn.Softmax(-1)
-#         )
-
-#     def forward(self, x):
-#         x = x.view(x.size(0), -1)
-#         x = self.features(x)
-#         x = self.classifier(x)
-#         return x
+def loader(path):
+    s = " ".join(open(path, "r").read().split())
+    wavelet = ast.literal_eval(s.replace('\n', '').replace(' ', ','))
+    return wavelet
 
 
-for batch_loop in [128]:#[32, 64, 128]:
-    for lr_loop in [1e-4]:#, 1e-4, 5e-5, 1e-6]:
-        print(batch_loop)
-        print(lr_loop)
-
-        """## Training"""
-        print('Training Started!')
-        batch_size = batch_loop
-        input_shape = (1, 256, 256)
-
-        super_classes = np.array(["CD", "HYP", "MI", "NORM", "STTC"])
-        data_path = '/inputs/TAU/SP/data/stft_norm' # '/inputs/TAU/SP/data/STFT' (all data)  # '/inputs/TAU/SP/data/stft_norm' (only male)
-        dm = STFT(batch_size, data_path)
-        dm.prepare_data()
-        # dm._has_setup_fit = False
-        dm.setup()
-
-        label_hist = list(np.unique(dm.train.dataset.targets, return_counts=True))
-        label_hist[1] = label_hist[1] / sum(label_hist[1])
-
-        # plt.hist(dm.val.dataset.targets)
-
-        # Samples required by the custom ImagePredictionLogger callback to log image predictions.
-        val_samples = next(iter(dm.val_dataloader()))
-        val_imgs, val_labels = val_samples[0], val_samples[1]
-
-        logger = TensorBoardLogger('runs', "NORM_STFT")
+def get_data_module(mode, batch_size, data_path):
+    if mode in ('Hwavelet', 'Dwavelet', 'Original'):
+        dm = OneDimDataModule(batch_size, data_path)
+    elif mode == 'STFT':
+        dm = STFTDataModule(batch_size, data_path)
+    return dm
 
 
-        MODEL_CKPT_PATH = 'model/'
-        MODEL_CKPT = 'model/model-{epoch:02d}-{val_loss:.2f}'
+def get_model(mode, input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num):
+    if mode in ('Hwavelet', 'Dwavelet', 'Original'):
+        model = OneDimNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        # model = OneDimConvNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
-        # Init our model
-        lr = lr_loop
-        weight_decay = 0.005
-        drop_prob = 0
-        loss_weights = torch.cuda.FloatTensor(label_hist[1])
-        model = PaperNet(input_shape, len(super_classes), loss_weights, device, lr, weight_decay, batch_size, drop_prob)
-        # model = Net1(input_shape, len(super_classes), loss_weights, device, lr, weight_decay, batch_size)
+    elif mode == 'STFT':
+        model = PaperNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
-        trainer = pl.Trainer(
-            logger=logger,    # TB integration
-            log_every_n_steps=1,   # set the logging frequency
-            gpus=1,                # use one GPU
-            max_epochs=200,           # number of epochs
-            # deterministic=True,     # keep it deterministic
-            auto_lr_find=True,
-            callbacks=[
-                        ImagePredictionLogger(val_samples, super_classes),
-                        ModelCheckpoint(monitor='val_loss', filename=MODEL_CKPT, save_top_k=1, mode='min')
-                        #  EarlyStopping(monitor='val_loss',patience=3,verbose=False,mode='min')
-                        ]  # see Callbacks section
-            )
+    return model
 
-        # Train the model ⚡🚅⚡
-        trainer.fit(model, datamodule=dm)
 
-        # evaluate the model on a test set
-        trainer.test(model, datamodule=dm)  # uses last-saved model
+mode = 'Original'  # 'Hwavelet' 'STFT' 'Dwavelet' 'Original'
+if mode == 'Hwavelet':
+    data_path = '/inputs/TAU/SP/data/wavelets/HaarWavelet'  # '/inputs/TAU/SP/data/STFT' (all data)  # '/inputs/TAU/SP/data/stft_norm' (only male)
+    input_shape = (1, 1000)
+elif mode == 'STFT':
+    data_path = '/inputs/TAU/SP/data/stft_norm'
+    input_shape = (1, 256, 256)
+elif mode == 'Dwavelet':
+    data_path = '/inputs/TAU/SP/data/wavelets/Dwavelet'
+    input_shape = (1, 1000)
+elif mode == 'Original':
+    data_path = '/inputs/TAU/SP/data/original/'
+    input_shape = (1, 1000)
+
+
+super_classes = np.array(["CD", "HYP", "MI", "NORM", "STTC"])
+
+MODEL_CKPT_PATH = 'model/'
+MODEL_CKPT = 'model/model-{epoch:02d}-{val_loss:.2f}'
+
+
+for batch_loop in [128]: #[16, 32, 64, 256]:
+    for lr_loop in [3e-4]:#, 1e-3, 1e-4, 1e-5]:
+        for feature_num in [13]: #[10, 20, 50, 100]:
+            for drop_prob_loop in [0]:
+                print('batch_loop: ', batch_loop)
+                print('lr_loop: ', lr_loop)
+                print('feature_num: ', feature_num)
+                print('drop_prob_loop: ', drop_prob_loop)
+
+                batch_size = batch_loop
+
+                dm = get_data_module(mode, batch_size, data_path)
+
+                # # dm._has_setup_fit = False
+                dm.setup()
+
+                label_hist = list(np.unique(dm.train.dataset.targets, return_counts=True))
+                print('label_hist: ', label_hist)
+                label_hist[1] = label_hist[1] / sum(label_hist[1])
+                # plt.hist(dm.val.dataset.targets)
+
+                # # Samples required by the custom ImagePredictionLogger callback to log image predictions.
+                val_samples = next(iter(dm.val_dataloader()))
+                val_imgs, val_labels = val_samples[0], val_samples[1]
+
+                x = val_imgs[[0]]
+                a = nn.Conv1d(1, 256, 7)
+                b = a(x.unsqueeze(0))
+                print(b.shape)
+
+                # Init our model
+                lr = lr_loop
+                weight_decay = 0
+                drop_prob = drop_prob_loop
+                loss_weights = torch.cuda.FloatTensor(label_hist[1])
+
+                model = get_model(mode, input_shape, len(super_classes), loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+
+                logger = TensorBoardLogger('runs', mode)
+
+                """## Training"""
+                print('Training Started!')
+                trainer = pl.Trainer(
+                    logger=logger,    # TB integration
+                    log_every_n_steps=1,   # set the logging frequency
+                    gpus=1,                # use one GPU
+                    max_epochs=80,           # number of epochs
+                    # deterministic=True,     # keep it deterministic
+                    auto_lr_find=True,
+                    callbacks=[
+                                ImagePredictionLogger(val_samples, super_classes),
+                                ModelCheckpoint(monitor='val_loss', filename=MODEL_CKPT, save_top_k=1, mode='min')
+                                #  EarlyStopping(monitor='val_loss',patience=3,verbose=False,mode='min')
+                                ]  # see Callbacks section
+                    )
+
+                # Train the model ⚡🚅⚡
+                trainer.fit(model, datamodule=dm)
+
+                # evaluate the model on a test set
+                trainer.test(model, datamodule=dm)  # uses last-saved model
 
 print('Training Finished!')
