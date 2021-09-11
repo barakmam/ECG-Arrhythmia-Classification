@@ -19,7 +19,10 @@ class Dataset:
         for key in y_dic.keys():
             if key in self.agg_df.index:
                 tmp.append(self.agg_df.loc[key].diagnostic_class)
-        return list(set(tmp))
+
+        if len(tmp)>1:
+            tmp=[]
+        return tmp
 
     def load_raw_data(self, df, sampling_rate, path):
         if sampling_rate == 100:
@@ -46,7 +49,7 @@ class Dataset:
 
     def load(self):
         # load and convert annotation data
-        Y = pd.read_csv(self.path + 'ptbxl_database.csv', index_col='ecg_id')
+        Y = pd.read_csv(self.path + 'ptbxl_database.csv', index_col='ecg_id') #start_date_str_rep
         Y.scp_codes = Y.scp_codes.apply(lambda x: ast.literal_eval(x))
 
         # Load raw signal data
