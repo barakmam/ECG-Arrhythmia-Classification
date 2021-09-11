@@ -13,7 +13,7 @@ import ast
 import json
 import uuid
 import cv2
-import pywt
+from pywt import wavedec
 
 ## Setting credentials using the downloaded JSON file
 path = 'model-azimuth-321409-241148a4b144.json'
@@ -42,7 +42,7 @@ class Blend(Dataset):
         self.X_test = data["X_test"]
         self.X_test_meta = data["X_test_meta"]
         self.y_test = data["y_test"]
-        self.state = 'HaarWavelet'  # expected {STFT,permutation,HaarWavelet}
+        self.state = 'Daubechies6Wavelet'  # expected {STFT,permutation,HaarWavelet,Daubechies6Wavelet}
         self.bucket = client.get_bucket('ecg-arrhythmia-classification')
 
         # datasttruct
@@ -131,7 +131,7 @@ class Blend(Dataset):
         self.coeff_A = 0.5  # <-- how much does A effect the blending
         self.coeff_B = 0.5  # <-- how much does B effect the blending
         self.dataset_types = ["train", "test"]
-        self.genders = [0, 1]
+        self.genders = [0,1]
         self.ops = ["<", ">="]
         self.age_th = 50
 
@@ -266,6 +266,14 @@ class Blend(Dataset):
 
         return approx, details
 
+    def daubechies6_dwt(self,signal,levels=3):
+        """
+        https://pywavelets.readthedocs.io/en/latest/ref/signal-extension-modes.html#ref-modes
+        """
+        cA3,cD2,cD1,cD0=wavedec(signal,'db6',mode='symmetric',level=levels)
+        return (cA3,[cD2,cD1,cD0])
+
+
     def gender_str(self, gender):
         return 'male' if gender == 0 else 'female'
 
@@ -350,37 +358,46 @@ class Blend(Dataset):
                             object_name_in_gcs_bucket = self.bucket.blob('data_map_folders:{}'.format(self.state))
                             object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
 
-                    elif self.state == "HaarWavelet":
+                    elif "Wavelet" in self.state:
                         length = len(d[dataset_type][gender][op]["A"])
                         for index in range(length):
                             print("Now processing state:{} dataset_type:{}, gender:{}, op:{} img:{}/{} ".format(self.state,dataset_type, self.gender_str(gender), op,index + 1, length))
                             for single in ["A", "B"]:
 
                                 ecg = d[dataset_type][gender][op][single][index].T[0]
-                                approximation,details= self.haar_dwt(ecg)
-                                haar_dwt=np.concatenate([approximation,np.concatenate(details)])
-                                mat=self.standertize_and_normalize(haar_dwt)
+
+
+                                if  self.state=="HaarWavelet":
+                                    approximation,details= self.haar_dwt(ecg)
+                                elif self.state=="Daubechies6Wavelet":
+                                    approximation,details = self.daubechies6_dwt(ecg)
+                                else:
+                                    raise Exception("wavelet statue is not supported")
+
+                                dwt=np.concatenate([approximation,np.concatenate(details)])[:1000]
+                                mat=self.standertize_and_normalize(dwt)
 
                                 # Y
-                                try:
-                                    y = d[dataset_type][gender][op][f"Y_{single}"].iloc[index][0]
-                                    pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(super_classes[y])
-                                except IndexError:
-                                    print("Processing of state:{} index:{} failed due to Index error".format(self.state,
-                                                                                                             index))
+
+                                y = d[dataset_type][gender][op][f"Y_{single}"].iloc[index]
+                                if not y:
+                                    print("skipped...")
                                     break
+
+                                y=y[0]
+                                pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(super_classes[y])
 
                                 file_uuided = str(uuid.uuid4())
 
-                                object_name_in_gcs_bucket=self.bucket.blob('{}_{}/{}'.format(self.state,y,file_uuided))
+                                object_name_in_gcs_bucket=self.bucket.blob('{}/full_with_single/{}/{}_{}_{}'.format(self.state,y,file_uuided,self.gender_str(gender),op))
                                 object_name_in_gcs_bucket.upload_from_string(str(mat))
 
-                                pkl_dict[dataset_type][gender][op][single].append("{}_{}/{}".format(self.state,y,file_uuided))
-                                pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
-                                    d[dataset_type][gender][op][f"meta_{single}"][index])
+                                # pkl_dict[dataset_type][gender][op][single].append("ONLY_MEN_{}_{}/{}".format(self.state,y,file_uuided))
+                                # pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
+                                #     d[dataset_type][gender][op][f"meta_{single}"][index])
 
-                        object_name_in_gcs_bucket = self.bucket.blob('data_map_folders:{}'.format(self.state))
-                        object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
+                        # object_name_in_gcs_bucket = self.bucket.blob('data_map_folders:{}'.format(self.state))
+                        # object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
 
                     else:
                         raise NotImplementedError
@@ -400,6 +417,11 @@ class Blend(Dataset):
             pickle.loads(blob.download_as_bytes())
             plt.show()
         elif self.state=='HaarWavelet':
+
+            # f = " ".join(
+            #     open("./HaarWavelet/HYP/HaarWavelet_HYP/0a295891-2caa-4505-a5c7-ed8ad15d3724", "r").read().split())
+            #ast.literal_eval(f.replace(' ', ','))
+
             blob = self.bucket.blob("{}".format(d['train'][0]['<']['A'][0]))
 
             s=" ".join(blob.download_as_string().decode('utf-8').split())
