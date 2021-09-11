@@ -11,22 +11,34 @@ import wandb
 
 
 class PaperNet(pl.LightningModule):
-    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate=2e-4,weight_decay=1.5e-06):
+    def __init__(self, input_shape, num_classes, device,batch_size,lr, weight_decay=1.5e-06):
         super().__init__()
 
-        self.dropout=0.1
+        self.lr=lr
+        self.batch_size=batch_size
 
         # log hyperparameters
         self.save_hyperparameters()
-        self.learning_rate = learning_rate
-        self.loss_weights = loss_weights
         self.automatic_optimization = True
         self.weight_decay = weight_decay
 
+
         self.features = nn.Sequential(
-            nn.Conv2d(1, 8, 4),
+            nn.Conv2d(1, 8, 5),
             nn.BatchNorm2d(8),
             nn.ReLU(),
+            nn.Dropout(),
+            nn.MaxPool2d(2),
+            nn.Conv2d(8, 13, 3),
+            nn.BatchNorm2d(13),
+            nn.ReLU(),
+            nn.Dropout(),
+            nn.MaxPool2d(2),
+            nn.Conv2d(13, 13, 3),
+            nn.BatchNorm2d(13),
+            nn.ReLU(),
+            nn.Dropout(),
+            nn.MaxPool2d(2)
         ).to(device)
 
         self.features_num = self._get_conv_output(input_shape)
@@ -35,6 +47,7 @@ class PaperNet(pl.LightningModule):
             nn.Linear(self.features_num, 8),
             nn.BatchNorm1d(8),
             nn.ReLU(),
+            nn.Dropout(),
             nn.Linear(8, num_classes),
             nn.Softmax(-1)
         ).to(device)
@@ -59,7 +72,8 @@ class PaperNet(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = F.nll_loss(F.log_softmax(logits), y) # , weight=self.loss_weights)
+
+        loss = F.nll_loss(logits, y)  # , weight=self.loss_weights)
 
         # training metrics
         preds = torch.argmax(logits, dim=1)
@@ -73,7 +87,7 @@ class PaperNet(pl.LightningModule):
         x, y = batch
         logits = self(x)
 
-        loss = F.nll_loss(F.log_softmax(logits), y) #, weight=self.loss_weights)
+        loss = F.nll_loss(logits, y)  # , weight=self.loss_weights)
         # validation metrics
         preds = torch.argmax(logits, dim=1)
         acc = accuracy(preds, y)
@@ -84,7 +98,7 @@ class PaperNet(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = F.nll_loss(F.log_softmax(logits), y) #  weight=self.loss_weights)
+        loss = F.nll_loss(logits, y)  # weight=self.loss_weights)
 
         # validation metrics
         preds = torch.argmax(logits, dim=1)
@@ -94,32 +108,16 @@ class PaperNet(pl.LightningModule):
         return loss  # {'loss': loss}
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay,)
+        optimizer = torch.optim.Adam(self.parameters(), weight_decay=self.weight_decay)
+        lr_scheduler = {'scheduler': torch.optim.lr_scheduler.StepLR(
+            optimizer,step_size=3,gamma=0.90),
+        }
+
+        # lr_scheduler = {'scheduler': torch.optim.lr_scheduler.MultiStepLR(
+        #     optimizer,milestones=[5,10]),
+        # }
+        # return [optimizer],[lr_scheduler]
         return optimizer
-
-
-class Net1(PaperNet):
-    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate=2e-4,weight_decay=1.5e-06):
-        super().__init__(input_shape, num_classes, loss_weights, device, learning_rate,weight_decay=weight_decay)
-        self.dropout=0.1
-
-        self.features = nn.Sequential(
-            nn.Conv2d(1, 3, 4),
-            nn.BatchNorm2d(3),
-            nn.Dropout2d(p=self.dropout),
-            nn.ReLU(),
-        ).to(device)
-
-        self.features_num = self._get_conv_output(input_shape)
-
-        self.classifier = nn.Sequential(
-            nn.Linear(self.features_num, 8),
-            nn.BatchNorm1d(8),
-            nn.Dropout2d(p=self.dropout),
-            nn.ReLU(),
-            nn.Linear(8, num_classes),
-            nn.LogSoftmax(-1)
-        ).to(device)
 
 
 class ImagePredictionLogger(Callback):

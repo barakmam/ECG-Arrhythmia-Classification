@@ -9,10 +9,3 @@ dataset/
 /venv/
 /ECG_spec_classify/
 /wandb/
-/STFT/
-/STFT_bucket/
-/HaarWavelet/
-/ONLY_MEN_Daubenchies6/
-/ONLY_MEN_HAAR/
-/Daubechies6Wavelet/
-/full_with_multiple/
