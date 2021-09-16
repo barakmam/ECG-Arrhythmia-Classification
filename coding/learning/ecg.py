@@ -142,7 +142,7 @@ class WaveletData(Dataset):
         for ii, curr_class in enumerate(classes_names):
             file_name = glob.glob(os.path.join(path, curr_class, '*'))
             np.random.shuffle(file_name)
-            file_name = file_name[:4000]
+            file_name = file_name[:]
             self.targets.extend([ii]*len(file_name))
             self.data.extend(file_name)
 
@@ -261,12 +261,13 @@ class OneDimDataModule(pl.LightningDataModule):
 
 class PaperNet(pl.LightningModule):
     """## Model"""
-    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob=0, num_features_fc=13):
+    def __init__(self, input_shape, num_classes, loss_weights_train,loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob=0, num_features_fc=13):
         super().__init__()
 
         # log hyper-parameters
         self.learning_rate = learning_rate
-        self.loss_weights = loss_weights
+        self.loss_weights_train = loss_weights_train
+        self.loss_weights_val = loss_weights_val
         self.weight_decay = weight_decay
         self.batch_size = batch_size
         self.drop_prob = drop_prob
@@ -295,7 +296,6 @@ class PaperNet(pl.LightningModule):
         self.classifier = nn.Sequential(
             nn.Linear(self.features_num, self.num_features_fc),
             nn.BatchNorm1d(self.num_features_fc),
-            nn.ReLU(),
             nn.Dropout2d(p=drop_prob),
             nn.Linear(self.num_features_fc, num_classes),
             nn.Softmax(-1)
@@ -323,7 +323,7 @@ class PaperNet(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = F.nll_loss(logits, y, weight=self.loss_weights)
+        loss = F.nll_loss(logits, y, weight=self.loss_weights_train)
 
         # training metrics
         # preds = torch.argmax(logits, dim=1)
@@ -360,7 +360,7 @@ class PaperNet(pl.LightningModule):
         x, y = batch
         logits = self(x)
         
-        loss = F.nll_loss(logits, y, weight=self.loss_weights)
+        loss = F.nll_loss(logits, y, weight=self.loss_weights_val)
 
         correct = (torch.argmax(logits, -1) == y).sum()
         total = torch.numel(y)
@@ -390,7 +390,7 @@ class PaperNet(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = F.nll_loss(logits, y, weight=self.loss_weights)
+        loss = F.nll_loss(logits, y)
 
         # validation metrics
         preds = torch.argmax(logits, dim=1)
@@ -420,35 +420,35 @@ class OneDimNet(PaperNet):
         features = feature_num
         self.features = nn.Sequential(
             nn.Linear(input_shape[1], features),
-            nn.BatchNorm1d(features),
-            nn.Dropout2d(p=drop_prob),
-            nn.LeakyReLU(),
-            # nn.MaxPool1d(2),
-            # nn.Linear(features, features),
-            # nn.BatchNorm1d(features),
             # nn.Dropout2d(p=drop_prob),
-            # nn.LeakyReLU(),
-            # nn.Linear(features, features),
-            # nn.BatchNorm1d(features),
+            nn.BatchNorm1d(features),
+            nn.ReLU(),
+            # nn.MaxPool1d(2),
+            nn.Linear(features, features),
+            nn.BatchNorm1d(features),
             # nn.Dropout2d(p=drop_prob),
             # nn.LeakyReLU(),
             nn.Linear(features, features),
             nn.BatchNorm1d(features),
-            nn.Dropout2d(p=drop_prob),
-            nn.LeakyReLU()
+            # nn.Dropout2d(p=drop_prob),
+            nn.ReLU(),
+            nn.Linear(features, features),
+            # nn.Dropout2d(p=drop_prob),
+            nn.BatchNorm1d(features),
+            nn.ReLU()
         )
 
         self.classifier = nn.Sequential(
             # nn.MaxPool1d(2),
             nn.Linear(features, features),
             nn.BatchNorm1d(features),
-            nn.Dropout2d(p=drop_prob),
-            nn.LeakyReLU(),
+            # nn.Dropout2d(p=drop_prob),
+            nn.ReLU(),
             # nn.MaxPool1d(2),
             nn.Linear(features, features),
             nn.BatchNorm1d(features),
-            nn.Dropout2d(p=drop_prob),
-            nn.LeakyReLU(),
+            # nn.Dropout2d(p=drop_prob),
+            nn.ReLU(),
             # nn.MaxPool1d(2),
             nn.Linear(features, num_classes),
             nn.Softmax(-1)
@@ -465,8 +465,8 @@ class OneDimNet(PaperNet):
 
 
 class OneDimConvNet(PaperNet):
-    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num):
-        super().__init__(input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num)
+    def __init__(self, input_shape, num_classes, loss_weights_train,loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num):
+        super().__init__(input_shape, num_classes, loss_weights_train,loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num)
 
     def forward(self, x):
         x = self.pre_process(x.unsqueeze(1)).unsqueeze(1)
@@ -523,7 +523,7 @@ class ImagePredictionLogger(Callback):
     def on_validation_epoch_end(self, trainer, pl_module):
         # Bring the tensors to CPU
         val_imgs = self.val_imgs.to(device=pl_module.device)
-        val_labels = self.classes_names[self.val_labels]
+        val_labels = self.classes_names[self.val_labels]  # .to(device=pl_module.device)
         # Get model prediction
         logits = pl_module(val_imgs)
         preds = self.classes_names[torch.argmax(logits, -1).cpu()]
@@ -573,26 +573,25 @@ def get_data_module(mode, batch_size, data_path):
     return dm
 
 
-def get_model(mode, input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num):
+def get_model(mode, input_shape, num_classes, loss_weights_train,loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num):
     if mode in ('Hwavelet', 'Dwavelet', 'Original'):
-        model = OneDimNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
-        # model = OneDimConvNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        #model = OneDimNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        model = OneDimConvNet(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
     elif mode == 'STFT':
-        model = PaperNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        model = PaperNet(input_shape, num_classes, loss_weights_train, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
     return model
 
-
-mode = 'Original'  # 'Hwavelet' 'STFT' 'Dwavelet' 'Original'
+mode = 'Hwavelet'  # 'Hwavelet' 'STFT' 'Dwavelet' 'Original'
 if mode == 'Hwavelet':
-    data_path = '/inputs/TAU/SP/data/wavelets/HaarWavelet'  # '/inputs/TAU/SP/data/STFT' (all data)  # '/inputs/TAU/SP/data/stft_norm' (only male)
+    data_path = './HaarWavelet/only_men_with_single'  # '/inputs/TAU/SP/data/STFT' (all data)  # '/inputs/TAU/SP/data/stft_norm' (only male)
     input_shape = (1, 1000)
 elif mode == 'STFT':
     data_path = '/inputs/TAU/SP/data/stft_norm'
     input_shape = (1, 256, 256)
 elif mode == 'Dwavelet':
-    data_path = '/inputs/TAU/SP/data/wavelets/Dwavelet'
+    data_path = './Daubechies6Wavelet/full_with_single'
     input_shape = (1, 1000)
 elif mode == 'Original':
     data_path = '/inputs/TAU/SP/data/original/'
@@ -606,9 +605,9 @@ MODEL_CKPT = 'model/model-{epoch:02d}-{val_loss:.2f}'
 
 
 for batch_loop in [128]: #[16, 32, 64, 256]:
-    for lr_loop in [3e-4]:#, 1e-3, 1e-4, 1e-5]:
+    for lr_loop in [1e-3]:#, 1e-3, 1e-4, 1e-5]:
         for feature_num in [13]: #[10, 20, 50, 100]:
-            for drop_prob_loop in [0]:
+            for drop_prob_loop in [0.0]:
                 print('batch_loop: ', batch_loop)
                 print('lr_loop: ', lr_loop)
                 print('feature_num: ', feature_num)
@@ -621,9 +620,13 @@ for batch_loop in [128]: #[16, 32, 64, 256]:
                 # # dm._has_setup_fit = False
                 dm.setup()
 
-                label_hist = list(np.unique(dm.train.dataset.targets, return_counts=True))
-                print('label_hist: ', label_hist)
-                label_hist[1] = label_hist[1] / sum(label_hist[1])
+                label_hist_train = list(np.unique(dm.train.dataset.targets[dm.train.indices], return_counts=True))
+                print('label_hist_train: ', label_hist_train)
+                label_hist_train[1] = label_hist_train[1] / sum(label_hist_train[1])
+
+                label_hist_val = list(np.unique(dm.val.dataset.targets[dm.val.indices], return_counts=True))
+                print('label_hist_val: ', label_hist_val)
+                label_hist_val[1] = label_hist_val[1] / sum(label_hist_val[1])
                 # plt.hist(dm.val.dataset.targets)
 
                 # # Samples required by the custom ImagePredictionLogger callback to log image predictions.
@@ -637,21 +640,26 @@ for batch_loop in [128]: #[16, 32, 64, 256]:
 
                 # Init our model
                 lr = lr_loop
-                weight_decay = 0
+                weight_decay = 0.00
                 drop_prob = drop_prob_loop
-                loss_weights = torch.cuda.FloatTensor(label_hist[1])
+                loss_weights_train = torch.cuda.FloatTensor(label_hist_train[1])
+                loss_weights_val = torch.cuda.FloatTensor(label_hist_val[1])
 
-                model = get_model(mode, input_shape, len(super_classes), loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+                model = get_model(mode, input_shape, len(super_classes), loss_weights_train,loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
-                logger = TensorBoardLogger('runs', mode)
+                logger = TensorBoardLogger('runs', data_path)
 
                 """## Training"""
                 print('Training Started!')
                 trainer = pl.Trainer(
+                    # gradient_clip_val=0.001,
+                    # gradient_clip_algorithm="value",
+                    stochastic_weight_avg=True,
+                    # accumulate_grad_batches=8,
                     logger=logger,    # TB integration
                     log_every_n_steps=1,   # set the logging frequency
                     gpus=1,                # use one GPU
-                    max_epochs=80,           # number of epochs
+                    max_epochs=200,           # number of epochs
                     # deterministic=True,     # keep it deterministic
                     auto_lr_find=True,
                     callbacks=[

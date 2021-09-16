@@ -19,10 +19,11 @@ class Dataset:
         for key in y_dic.keys():
             if key in self.agg_df.index:
                 tmp.append(self.agg_df.loc[key].diagnostic_class)
-
-        if len(tmp)>1:
-            tmp=[]
-        return tmp
+                return tmp
+        #
+        # if len(tmp)>1:
+        #     tmp=[]
+        # return tmp
 
     def load_raw_data(self, df, sampling_rate, path):
         if sampling_rate == 100:

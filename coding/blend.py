@@ -131,7 +131,7 @@ class Blend(Dataset):
         self.coeff_A = 0.5  # <-- how much does A effect the blending
         self.coeff_B = 0.5  # <-- how much does B effect the blending
         self.dataset_types = ["train", "test"]
-        self.genders = [0,1]
+        self.genders = [0]
         self.ops = ["<", ">="]
         self.age_th = 50
 
@@ -389,7 +389,7 @@ class Blend(Dataset):
 
                                 file_uuided = str(uuid.uuid4())
 
-                                object_name_in_gcs_bucket=self.bucket.blob('{}/full_with_single/{}/{}_{}_{}'.format(self.state,y,file_uuided,self.gender_str(gender),op))
+                                object_name_in_gcs_bucket=self.bucket.blob('{}/only_men_with_multiple/{}/{}_{}_{}'.format(self.state,y,file_uuided,self.gender_str(gender),op))
                                 object_name_in_gcs_bucket.upload_from_string(str(mat))
 
                                 # pkl_dict[dataset_type][gender][op][single].append("ONLY_MEN_{}_{}/{}".format(self.state,y,file_uuided))
