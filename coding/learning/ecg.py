@@ -659,7 +659,7 @@ for batch_loop in [128]: #[16, 32, 64, 256]:
                     logger=logger,    # TB integration
                     log_every_n_steps=1,   # set the logging frequency
                     gpus=1,                # use one GPU
-                    max_epochs=100,           # number of epochs
+                    max_epochs=500,           # number of epochs
                     # deterministic=True,     # keep it deterministic
                     auto_lr_find=True,
                     callbacks=[
