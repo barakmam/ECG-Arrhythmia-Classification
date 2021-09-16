@@ -410,7 +410,7 @@ class PaperNet(pl.LightningModule):
         return batch_dict
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay , amsgrad=True)
         return optimizer
 
 
@@ -585,13 +585,13 @@ def get_model(mode, input_shape, num_classes, loss_weights_train,loss_weights_va
 
 mode = 'Hwavelet'  # 'Hwavelet' 'STFT' 'Dwavelet' 'Original'
 if mode == 'Hwavelet':
-    data_path = './HaarWavelet/only_men_with_single'  # '/inputs/TAU/SP/data/STFT' (all data)  # '/inputs/TAU/SP/data/stft_norm' (only male)
+    data_path = './HaarWavelet/full_with_single'  # '/inputs/TAU/SP/data/STFT' (all data)  # '/inputs/TAU/SP/data/stft_norm' (only male)
     input_shape = (1, 1000)
 elif mode == 'STFT':
     data_path = '/inputs/TAU/SP/data/stft_norm'
     input_shape = (1, 256, 256)
 elif mode == 'Dwavelet':
-    data_path = './Daubechies6Wavelet/full_with_single'
+    data_path = './Daubechies6Wavelet/only_men_with_single'
     input_shape = (1, 1000)
 elif mode == 'Original':
     data_path = '/inputs/TAU/SP/data/original/'
@@ -607,7 +607,7 @@ MODEL_CKPT = 'model/model-{epoch:02d}-{val_loss:.2f}'
 for batch_loop in [128]: #[16, 32, 64, 256]:
     for lr_loop in [1e-3]:#, 1e-3, 1e-4, 1e-5]:
         for feature_num in [13]: #[10, 20, 50, 100]:
-            for drop_prob_loop in [0.0]:
+            for drop_prob_loop in [0.2]:
                 print('batch_loop: ', batch_loop)
                 print('lr_loop: ', lr_loop)
                 print('feature_num: ', feature_num)
@@ -652,14 +652,14 @@ for batch_loop in [128]: #[16, 32, 64, 256]:
                 """## Training"""
                 print('Training Started!')
                 trainer = pl.Trainer(
-                    # gradient_clip_val=0.001,
-                    # gradient_clip_algorithm="value",
+                    gradient_clip_val=0.001,
+                    gradient_clip_algorithm="value",
                     stochastic_weight_avg=True,
-                    # accumulate_grad_batches=8,
+                    accumulate_grad_batches=8,
                     logger=logger,    # TB integration
                     log_every_n_steps=1,   # set the logging frequency
                     gpus=1,                # use one GPU
-                    max_epochs=200,           # number of epochs
+                    max_epochs=100,           # number of epochs
                     # deterministic=True,     # keep it deterministic
                     auto_lr_find=True,
                     callbacks=[
