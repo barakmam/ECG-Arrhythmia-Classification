@@ -75,7 +75,7 @@ class OriginalData(Dataset):
         Ya = Y['diagnostic_superclass'].to_numpy()
         Yb = np.array([classes_dict[y[0]] if len(y) == 1 else None for y in Ya])
 
-        max_inds_per_class = 2500
+        max_inds_per_class = 3500
         dataset_inds = []
         for curr_class in classes_dict.values():
             class_inds = np.where(Yb == curr_class)[0]
@@ -83,7 +83,7 @@ class OriginalData(Dataset):
             dataset_inds.extend(class_inds[:max_inds_per_class])
         dataset_inds = np.array(dataset_inds)
 
-        self.data = X[dataset_inds, 0, :]  # take only the 0 measurement for now
+        self.data = X[dataset_inds, 1, :]  # take only the 0 measurement for now
         self.targets = torch.LongTensor(Yb[dataset_inds].astype(np.int8))
 
         # proper_label_inds = np.where(Yb != None)[0]
@@ -271,6 +271,7 @@ class PaperNet(pl.LightningModule):
         self.batch_size = batch_size
         self.drop_prob = drop_prob
         self.num_features_fc = num_features_fc
+        self.input_shape = input_shape
         # self.device = device
         self.save_hyperparameters()
 
@@ -432,10 +433,10 @@ class OneDimNet(PaperNet):
             # nn.BatchNorm1d(features),
             # nn.Dropout2d(p=drop_prob),
             # nn.LeakyReLU(),
-            nn.Linear(features, features),
-            nn.BatchNorm1d(features),
-            nn.Dropout2d(p=drop_prob),
-            nn.LeakyReLU()
+            # nn.Linear(features, features),
+            # nn.BatchNorm1d(features),
+            # nn.Dropout2d(p=drop_prob),
+            # nn.LeakyReLU()
         )
 
         self.classifier = nn.Sequential(
@@ -513,6 +514,15 @@ class ResNet(PaperNet):
         return nn.Conv1d(1, 256, 3, 1)
 
 
+class LSTM(OneDimNet):
+    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num):
+        super().__init__(input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num)
+
+
+    def get_pre_process(self):
+        return nn.GRU(input_size=self.input_shape[1], hidden_size=8, num_layers=2, batch_first=True, dropout=self.drop_prob)
+
+
 class ImagePredictionLogger(Callback):
     def __init__(self, val_samples, classes_names, num_samples=20):
         super().__init__()
@@ -575,8 +585,9 @@ def get_data_module(mode, batch_size, data_path):
 
 def get_model(mode, input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num):
     if mode in ('Hwavelet', 'Dwavelet', 'Original'):
-        model = OneDimNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        # model = OneDimNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
         # model = OneDimConvNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        model = LSTM(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
     elif mode == 'STFT':
         model = PaperNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
@@ -586,10 +597,10 @@ def get_model(mode, input_shape, num_classes, loss_weights, device, lr, weight_d
 
 mode = 'Original'  # 'Hwavelet' 'STFT' 'Dwavelet' 'Original'
 if mode == 'Hwavelet':
-    data_path = '/inputs/TAU/SP/data/wavelets/HaarWavelet'  # '/inputs/TAU/SP/data/STFT' (all data)  # '/inputs/TAU/SP/data/stft_norm' (only male)
+    data_path = '/inputs/TAU/SP/data/wavelets/Hwavelet/only men multiple/ONLY_MEN_HAAR' #  '/inputs/TAU/SP/data/wavelets/HaarWavelet'  # '/inputs/TAU/SP/data/STFT' (all data)  # '/inputs/TAU/SP/data/wavelets/Hwavelet/only men multiple/ONLY_MEN_HAAR' (only male)
     input_shape = (1, 1000)
 elif mode == 'STFT':
-    data_path = '/inputs/TAU/SP/data/stft_norm'
+    data_path = '/inputs/TAU/SP/data/STFT'  # '/inputs/TAU/SP/data/stft_norm'
     input_shape = (1, 256, 256)
 elif mode == 'Dwavelet':
     data_path = '/inputs/TAU/SP/data/wavelets/Dwavelet'
@@ -630,10 +641,10 @@ for batch_loop in [128]: #[16, 32, 64, 256]:
                 val_samples = next(iter(dm.val_dataloader()))
                 val_imgs, val_labels = val_samples[0], val_samples[1]
 
-                x = val_imgs[[0]]
-                a = nn.Conv1d(1, 256, 7)
-                b = a(x.unsqueeze(0))
-                print(b.shape)
+                # x = val_imgs[[0]]
+                # a = nn.Conv1d(1, 256, 7)
+                # b = a(x.unsqueeze(0))
+                # print(b.shape)
 
                 # Init our model
                 lr = lr_loop
