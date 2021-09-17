@@ -261,12 +261,13 @@ class OneDimDataModule(pl.LightningDataModule):
 
 class PaperNet(pl.LightningModule):
     """## Model"""
-    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob=0, num_features_fc=13):
+    def __init__(self, input_shape, num_classes, loss_weights_train, loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob=0, num_features_fc=13):
         super().__init__()
 
         # log hyper-parameters
         self.learning_rate = learning_rate
-        self.loss_weights = loss_weights
+        self.loss_weights_train = loss_weights_train
+        self.loss_weights_val = loss_weights_val
         self.weight_decay = weight_decay
         self.batch_size = batch_size
         self.drop_prob = drop_prob
@@ -324,7 +325,7 @@ class PaperNet(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = F.nll_loss(logits, y, weight=self.loss_weights)
+        loss = F.nll_loss(logits, y, weight=self.loss_weights_train)
 
         # training metrics
         # preds = torch.argmax(logits, dim=1)
@@ -361,7 +362,7 @@ class PaperNet(pl.LightningModule):
         x, y = batch
         logits = self(x)
         
-        loss = F.nll_loss(logits, y, weight=self.loss_weights)
+        loss = F.nll_loss(logits, y, weight=self.loss_weights_val)
 
         correct = (torch.argmax(logits, -1) == y).sum()
         total = torch.numel(y)
@@ -391,7 +392,7 @@ class PaperNet(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = F.nll_loss(logits, y, weight=self.loss_weights)
+        loss = F.nll_loss(logits, y)
 
         # validation metrics
         preds = torch.argmax(logits, dim=1)
@@ -416,8 +417,8 @@ class PaperNet(pl.LightningModule):
 
 
 class OneDimNet(PaperNet):
-    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num):
-        super().__init__(input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num)
+    def __init__(self, input_shape, num_classes, loss_weights_train, loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num):
+        super().__init__(input_shape, num_classes, loss_weights_train, loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num)
         features = feature_num
         self.features = nn.Sequential(
             nn.Linear(input_shape[1], features),
@@ -466,8 +467,8 @@ class OneDimNet(PaperNet):
 
 
 class OneDimConvNet(PaperNet):
-    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num):
-        super().__init__(input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num)
+    def __init__(self, input_shape, num_classes, loss_weights_train, loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num):
+        super().__init__(input_shape, num_classes, loss_weights_train, loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num)
 
     def forward(self, x):
         x = self.pre_process(x.unsqueeze(1)).unsqueeze(1)
@@ -515,8 +516,8 @@ class ResNet(PaperNet):
 
 
 class LSTM(OneDimNet):
-    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num):
-        super().__init__(input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num)
+    def __init__(self, input_shape, num_classes, loss_weights_train, loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num):
+        super().__init__(input_shape, num_classes, loss_weights_train, loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num)
 
 
     def get_pre_process(self):
@@ -583,14 +584,14 @@ def get_data_module(mode, batch_size, data_path):
     return dm
 
 
-def get_model(mode, input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num):
+def get_model(mode, input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num):
     if mode in ('Hwavelet', 'Dwavelet', 'Original'):
-        # model = OneDimNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
-        # model = OneDimConvNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
-        model = LSTM(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        # model = OneDimNet(input_shape, num_classes, loss_weights_train, loss_weights_val,device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        # model = OneDimConvNet(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        model = LSTM(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
     elif mode == 'STFT':
-        model = PaperNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        model = PaperNet(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
     return model
 
@@ -632,10 +633,16 @@ for batch_loop in [128]: #[16, 32, 64, 256]:
                 # # dm._has_setup_fit = False
                 dm.setup()
 
-                label_hist = list(np.unique(dm.train.dataset.targets, return_counts=True))
-                print('label_hist: ', label_hist)
-                label_hist[1] = label_hist[1] / sum(label_hist[1])
-                # plt.hist(dm.val.dataset.targets)
+                label_hist_train = list(np.unique(dm.train.dataset.targets[dm.train.indices], return_counts=True))
+                print('label_hist: ', label_hist_train)
+                label_hist_train[1] = label_hist_train[1] / sum(label_hist_train[1])
+
+                label_hist_val = list(np.unique(dm.val.dataset.targets[dm.val.indices], return_counts=True))
+                print('label_hist: ', label_hist_val)
+                label_hist_val[1] = label_hist_val[1] / sum(label_hist_val[1])
+
+
+
 
                 # # Samples required by the custom ImagePredictionLogger callback to log image predictions.
                 val_samples = next(iter(dm.val_dataloader()))
@@ -650,15 +657,20 @@ for batch_loop in [128]: #[16, 32, 64, 256]:
                 lr = lr_loop
                 weight_decay = 0
                 drop_prob = drop_prob_loop
-                loss_weights = torch.cuda.FloatTensor(label_hist[1])
+                loss_weights_train = torch.cuda.FloatTensor(label_hist_train[1])
+                loss_weights_val = torch.cuda.FloatTensor(label_hist_val[1])
 
-                model = get_model(mode, input_shape, len(super_classes), loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+                model = get_model(mode, input_shape, len(super_classes), loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
-                logger = TensorBoardLogger('runs', mode)
+                logger = TensorBoardLogger('runs', f'{data_path}_featureNum:{feature_num}_dropProbLoop:{drop_prob_loop}')
 
                 """## Training"""
                 print('Training Started!')
                 trainer = pl.Trainer(
+                    gradient_clip_val=0.01,
+                    gradient_clip_algorithm="value",
+                    stochastic_weight_avg=True,
+                    accumulate_grad_batches=batch_loop,
                     logger=logger,    # TB integration
                     log_every_n_steps=1,   # set the logging frequency
                     gpus=1,                # use one GPU
@@ -667,7 +679,7 @@ for batch_loop in [128]: #[16, 32, 64, 256]:
                     auto_lr_find=True,
                     callbacks=[
                                 ImagePredictionLogger(val_samples, super_classes),
-                                ModelCheckpoint(monitor='val_loss', filename=MODEL_CKPT, save_top_k=1, mode='min')
+                                #ModelCheckpoint(monitor='val_loss', filename=MODEL_CKPT, save_top_k=1, mode='min')
                                 #  EarlyStopping(monitor='val_loss',patience=3,verbose=False,mode='min')
                                 ]  # see Callbacks section
                     )
