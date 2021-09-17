@@ -43,7 +43,7 @@ if __name__=="__main__":
 
 
     # Init our data pipeline
-    data_dir='./STFT'
+    data_dir='./HaarWavelet/only_men_with_single'
     is_train = True
     batch_size = 32
     input_shape = (1, 256, 256)
