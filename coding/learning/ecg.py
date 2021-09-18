@@ -585,9 +585,9 @@ def get_data_module(mode, batch_size, data_path):
 
 def get_model(mode, input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num):
     if mode in ('Hwavelet', 'Dwavelet', 'Original'):
-        # model = OneDimNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        model = OneDimNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
         # model = OneDimConvNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
-        model = LSTM(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        # model = LSTM(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
     elif mode == 'STFT':
         model = PaperNet(input_shape, num_classes, loss_weights, device, lr, weight_decay, batch_size, drop_prob, feature_num)
@@ -595,7 +595,7 @@ def get_model(mode, input_shape, num_classes, loss_weights, device, lr, weight_d
     return model
 
 
-mode = 'Original'  # 'Hwavelet' 'STFT' 'Dwavelet' 'Original'
+mode = 'Hwavelet'  # 'Hwavelet' 'STFT' 'Dwavelet' 'Original'
 if mode == 'Hwavelet':
     data_path = '/inputs/TAU/SP/data/wavelets/Hwavelet/only men multiple/ONLY_MEN_HAAR' #  '/inputs/TAU/SP/data/wavelets/HaarWavelet'  # '/inputs/TAU/SP/data/STFT' (all data)  # '/inputs/TAU/SP/data/wavelets/Hwavelet/only men multiple/ONLY_MEN_HAAR' (only male)
     input_shape = (1, 1000)
