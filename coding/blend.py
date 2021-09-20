@@ -13,7 +13,9 @@ import ast
 import json
 import uuid
 import cv2
-from pywt import wavedec
+import pywt
+import sys
+np.set_printoptions(threshold=sys.maxsize)
 
 ## Setting credentials using the downloaded JSON file
 path = 'model-azimuth-321409-241148a4b144.json'
@@ -42,7 +44,7 @@ class Blend(Dataset):
         self.X_test = data["X_test"]
         self.X_test_meta = data["X_test_meta"]
         self.y_test = data["y_test"]
-        self.state = 'Daubechies6Wavelet'  # expected {STFT,permutation,HaarWavelet,Daubechies6Wavelet}
+        self.state = 'MorlWavelet'  # expected {STFT, MorlWavelet ,permutation,HaarWavelet,Daubechies6Wavelet, }
         self.bucket = client.get_bucket('ecg-arrhythmia-classification')
 
         # datasttruct
@@ -266,11 +268,20 @@ class Blend(Dataset):
 
         return approx, details
 
+    def morl_dwt(self,signal):
+        coeff_=[]
+        for i in range(12):
+            coeff, freq = pywt.cwt(signal[i],scales=range(1,257),wavelet='morl', sampling_period=1)
+            coeff_.append(coeff[:,:256])
+        return coeff_
+
+
+
     def daubechies6_dwt(self,signal,levels=3):
         """
         https://pywavelets.readthedocs.io/en/latest/ref/signal-extension-modes.html#ref-modes
         """
-        cA3,cD2,cD1,cD0=wavedec(signal,'db6',mode='symmetric',level=levels)
+        cA3,cD2,cD1,cD0=pywt.wavedec(signal,'db6',mode='symmetric',level=levels)
         return (cA3,[cD2,cD1,cD0])
 
 
@@ -314,24 +325,29 @@ class Blend(Dataset):
                                     d[gender][op][f"meta_{single}"][idx[idx_single]])
                                 pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(
                                     d[gender][op][f"Y_{single}"][idx[idx_single]])
-                    elif self.state == "STFT":
+                    elif "JPEG" in self.state:
                         length = len(d[dataset_type][gender][op]["A"])
                         for index in range(length):
                             print("Now processing state:{} dataset_type:{}, gender:{}, op:{} img:{}/{} ".format(self.state,dataset_type, self.gender_str(gender), op,index + 1, length))
 
                             for single in ["A", "B"]:
 
-                                ecg = d[dataset_type][gender][op][single][index].T[0]
+                                ecg = d[dataset_type][gender][op][single][index].T
 
-                                X_stft = self.STFT(ecg, self.win, self.hop, self.F, self.sample_rate)
+                                if self.state=="STFT_JPEG":
+                                    X_stft = self.STFT(ecg[0], self.win, self.hop, self.F, self.sample_rate)
 
-                                im = np.abs(X_stft)
-                                middle_y = im.shape[1] // 2
+                                    im = np.abs(X_stft)
+                                    middle_y = im.shape[1] // 2
 
-                                #standertize and normalize
-                                mat=self.standertize_and_normalize(im[middle_y:, 140:-145])
+                                    #standertize and normalize
+                                    mat=self.standertize_and_normalize(im[middle_y:, 140:-145])
+                                    plt.imsave("myplot.jpeg",
+                                               cv2.resize(mat, (256, 256), interpolation=cv2.INTER_CUBIC))  # 588,873
 
-                                plt.imsave("myplot.jpeg", cv2.resize(mat,(256,256),interpolation=cv2.INTER_CUBIC))  #588,873
+
+
+
 
                                 # Y
                                 try:
@@ -344,38 +360,50 @@ class Blend(Dataset):
                                 # create the dataset: data+metadata
                                 file_uuided = str(uuid.uuid4())
 
-                                blob = self.bucket.blob('{}_{}/{}.jpeg'.format(self.state,y, file_uuided))
+                                blob = self.bucket.blob('{}/{}/{}.jpeg'.format(self.state,y, file_uuided))
                                 with open("./myplot.jpeg", 'rb') as f:
                                     blob.upload_from_file(f)
 
-                                pkl_dict[dataset_type][gender][op][single].append("{}_{}/{}.jpeg".format(self.state,y,file_uuided))
-                                pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
-                                    d[dataset_type][gender][op][f"meta_{single}"][index])
+                                # pkl_dict[dataset_type][gender][op][single].append("{}/{}/{}.jpeg".format(self.state,y,file_uuided))
+                                # pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(
+                                #     d[dataset_type][gender][op][f"meta_{single}"][index])
 
                                 if self.STFT_show:
                                     plt.show()
 
-                            object_name_in_gcs_bucket = self.bucket.blob('data_map_folders:{}'.format(self.state))
-                            object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
+                            # object_name_in_gcs_bucket = self.bucket.blob('data_map_folders:{}'.format(self.state))
+                            # object_name_in_gcs_bucket.upload_from_string(str(pkl_dict))
 
                     elif "Wavelet" in self.state:
                         length = len(d[dataset_type][gender][op]["A"])
+
+
                         for index in range(length):
                             print("Now processing state:{} dataset_type:{}, gender:{}, op:{} img:{}/{} ".format(self.state,dataset_type, self.gender_str(gender), op,index + 1, length))
                             for single in ["A", "B"]:
 
-                                ecg = d[dataset_type][gender][op][single][index].T[0]
+                                ecg = d[dataset_type][gender][op][single][index].T
 
 
                                 if  self.state=="HaarWavelet":
-                                    approximation,details= self.haar_dwt(ecg)
+                                    approximation,details= self.haar_dwt(ecg[0])
+                                    dwt = np.concatenate([approximation, np.concatenate(details)])[:1000]
+                                    mat = self.standertize_and_normalize(dwt)
                                 elif self.state=="Daubechies6Wavelet":
-                                    approximation,details = self.daubechies6_dwt(ecg)
+                                    approximation,details = self.daubechies6_dwt(ecg[0])
+                                    dwt = np.concatenate([approximation, np.concatenate(details)])[:1000]
+                                    mat = self.standertize_and_normalize(dwt)
+
+                                elif self.state=='MorlWavelet':
+                                    mat=self.morl_dwt(ecg)
+                                    mat = self.standertize_and_normalize(mat)
+
+
+
                                 else:
                                     raise Exception("wavelet statue is not supported")
 
-                                dwt=np.concatenate([approximation,np.concatenate(details)])[:1000]
-                                mat=self.standertize_and_normalize(dwt)
+
 
                                 # Y
 
@@ -389,7 +417,7 @@ class Blend(Dataset):
 
                                 file_uuided = str(uuid.uuid4())
 
-                                object_name_in_gcs_bucket=self.bucket.blob('{}/only_men_with_multiple/{}/{}_{}_{}'.format(self.state,y,file_uuided,self.gender_str(gender),op))
+                                object_name_in_gcs_bucket=self.bucket.blob('{}/full_with_single/{}/{}_{}_{}'.format(self.state,y,file_uuided,self.gender_str(gender),op))
                                 object_name_in_gcs_bucket.upload_from_string(str(mat))
 
                                 # pkl_dict[dataset_type][gender][op][single].append("ONLY_MEN_{}_{}/{}".format(self.state,y,file_uuided))
@@ -409,8 +437,8 @@ class Blend(Dataset):
         https://stackoverflow.com/questions/7290370/store-and-reload-matplotlib-pyplot-object
         """
 
-        blob = self.bucket.blob('data_map:{}'.format(self.state))
-        d = ast.literal_eval(blob.download_as_string().decode('utf-8'))
+        # blob = self.bucket.blob('data_map:{}'.format(self.state))
+        # d = ast.literal_eval(blob.download_as_string().decode('utf-8'))
 
         if self.state=='STFT':
             blob = self.bucket.blob("{}".format(d['train'][0]['<']['A'][0]))
@@ -427,6 +455,10 @@ class Blend(Dataset):
             s=" ".join(blob.download_as_string().decode('utf-8').split())
             wavelet = ast.literal_eval(s.replace('\n','').replace(' ',','))
             print(wavelet)
+
+        elif self.state=='MorlWavelet':
+            f = " ".join( open("MorelWavelet/full_with_single/HYP/0b334307-1c0f-417d-9286-a766e838f6fd_male_<", "r", encoding="utf-8").read().split())
+            a=1
 
     def blend_in_time(self, A, B):
         """
