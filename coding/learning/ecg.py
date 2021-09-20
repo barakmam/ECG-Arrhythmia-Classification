@@ -25,11 +25,12 @@ from pytorch_lightning.metrics.functional import accuracy
 from pytorch_lightning.loggers import TensorBoardLogger
 from torchvision import transforms
 from torch.utils.data import DataLoader, random_split, Dataset
-from torchvision.models import resnet18
+from torchvision.models import resnet18, resnet34
 import wfdb
 import ast
 import pandas as pd
 import pickle
+import collections
 
 # setting device on GPU if available, else CPU
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -73,9 +74,9 @@ class OriginalData(Dataset):
         # Apply diagnostic superclass
         Y['diagnostic_superclass'] = Y.scp_codes.apply(self.aggregate_diagnostic)
         Ya = Y['diagnostic_superclass'].to_numpy()
-        Yb = np.array([classes_dict[y[0]] if len(y) == 1 else None for y in Ya])
+        Yb = np.array([classes_dict[y] if y is not None else None for y in Ya])
 
-        max_inds_per_class = 2500
+        max_inds_per_class = 4000
         dataset_inds = []
         for curr_class in classes_dict.values():
             class_inds = np.where(Yb == curr_class)[0]
@@ -129,9 +130,106 @@ class OriginalData(Dataset):
     def aggregate_diagnostic(self, y_dic):
         tmp = []
         for key in y_dic.keys():
-            if key in self.agg_df.index:
+            if y_dic[key] > 30 and key in self.agg_df.index:
                 tmp.append(self.agg_df.loc[key].diagnostic_class)
-        return list(set(tmp))
+        if 'HYP' in tmp:
+            return 'HYP'
+        if len(tmp) > 0:
+            return collections.Counter(tmp).most_common()[0][0]
+        return None
+        # return list(set(tmp))
+
+
+class OriginalImageData(Dataset):
+    def __init__(self, path, transform=None):
+
+        # # load and convert annotation data
+        # Y = pd.read_csv(path + 'ptbxl_database.csv', index_col='ecg_id')
+        # Y.scp_codes = Y.scp_codes.apply(lambda x: ast.literal_eval(x))
+        #
+        # # Load raw signal data
+        # sampling_rate = 100
+        # X = self.load_raw_data(Y, sampling_rate, path)
+        #
+        # # Load scp_statements.csv for diagnostic aggregation
+        self.agg_df = pd.read_csv(path + 'scp_statements.csv', index_col=0)
+        self.agg_df = self.agg_df[self.agg_df.diagnostic == 1]
+
+
+        # with open(path + 'Y_metadata.pickle', 'wb') as handle:
+        #     pickle.dump(Y, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+        with open(path + 'signals.pickle', 'rb') as handle:
+            X = pickle.load(handle)
+        with open(path + 'Y_metadata.pickle', 'rb') as handle:
+            Y = pickle.load(handle)
+
+        classes_dict = {"CD": 0, "HYP": 1, "MI": 2, "NORM": 3, "STTC": 4}
+        # Apply diagnostic superclass
+        Y['diagnostic_superclass'] = Y.scp_codes.apply(self.aggregate_diagnostic)
+        Ya = Y['diagnostic_superclass'].to_numpy()
+        Yb = np.array([classes_dict[y] if y is not None else None for y in Ya])
+
+        max_inds_per_class = 4000
+        dataset_inds = []
+        for curr_class in classes_dict.values():
+            class_inds = np.where(Yb == curr_class)[0]
+            np.random.shuffle(class_inds)
+            dataset_inds.extend(class_inds[:max_inds_per_class])
+        dataset_inds = np.array(dataset_inds)
+
+        self.data = X[dataset_inds].astype(np.float32)  # take only the 0 measurement for now
+        self.targets = torch.LongTensor(Yb[dataset_inds].astype(np.int8))
+
+        # proper_label_inds = np.where(Yb != None)[0]
+        # self.data = X[proper_label_inds, 0, :]  # take only the 0 measurement for now
+        # self.targets = torch.LongTensor(Yb[proper_label_inds].astype(np.int8))
+
+        # Split data into train and test
+        # test_fold = 10
+        # Train
+        # X_train = X[np.where(Y.strat_fold != test_fold)]
+        # y_train = Y[(Y.strat_fold != test_fold)].diagnostic_superclass
+        # Test
+        # X_test = X[np.where(Y.strat_fold == test_fold)]
+        # y_test = Y[Y.strat_fold == test_fold].diagnostic_superclass
+        # y_single_label = []
+
+        # self.data = X_train
+        # self.targets = torch.LongTensor(y_train)
+        self.transform = transform
+
+    def __getitem__(self, index):
+        x = self.data[[index]].transpose(1, 2, 0)
+        y = self.targets[index]
+
+        if self.transform:
+            x = self.transform(x)
+
+        return x, y
+
+    def __len__(self):
+        return len(self.data)
+
+    def load_raw_data(self, df, sampling_rate, path):
+        if sampling_rate == 100:
+            data = [wfdb.rdsamp(path + f) for f in df.filename_lr]
+        else:
+            data = [wfdb.rdsamp(path + f) for f in df.filename_hr]
+        data = np.array([signal for signal, meta in data])
+        return data
+
+    def aggregate_diagnostic(self, y_dic):
+        tmp = []
+        for key in y_dic.keys():
+            if y_dic[key] > 10 and key in self.agg_df.index:
+                tmp.append(self.agg_df.loc[key].diagnostic_class)
+        # if 'HYP' in tmp:
+        #     return 'HYP'
+        if len(tmp) > 0:
+            return collections.Counter(tmp).most_common()[0][0]
+        return None
+        # return list(set(tmp))
 
 
 class WaveletData(Dataset):
@@ -142,7 +240,7 @@ class WaveletData(Dataset):
         for ii, curr_class in enumerate(classes_names):
             file_name = glob.glob(os.path.join(path, curr_class, '*'))
             np.random.shuffle(file_name)
-            file_name = file_name[:]
+            file_name = file_name[:1500]
             self.targets.extend([ii]*len(file_name))
             self.data.extend(file_name)
 
@@ -219,13 +317,10 @@ class OneDimDataModule(pl.LightningDataModule):
         self.folder_path = folder_path
 
         self.transform = transforms.Compose([
-            transforms.ToTensor()#,
+            transforms.ToTensor(),
             # transforms.Grayscale(num_output_channels=1),
-            # transforms.Normalize((0.5), (0.5))
+            transforms.Normalize((0.5), (0.5))
         ])
-
-    def prepare_data(self):
-        pass
 
     def setup(self, stage=None):
         # Assign train/val datasets for use in dataloaders
@@ -256,12 +351,13 @@ class OneDimDataModule(pl.LightningDataModule):
         if mode in ('Hwavelet', 'Dwavelet'):
             return WaveletData(self.folder_path, self.transform)
         else:
-            return OriginalData(self.folder_path, self.transform)
+            # return OriginalData(self.folder_path, self.transform)
+            return OriginalImageData(self.folder_path, self.transform)
 
 
 class PaperNet(pl.LightningModule):
     """## Model"""
-    def __init__(self, input_shape, num_classes, loss_weights_train,loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob=0, num_features_fc=13):
+    def __init__(self, input_shape, num_classes, loss_weights_train, loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob=0, num_features_fc=13):
         super().__init__()
 
         # log hyper-parameters
@@ -495,33 +591,28 @@ class OneDimConvNet(PaperNet):
         return n_size
 
     def get_pre_process(self):
-        return nn.Conv1d(1, 32, 5, 2)
+        return nn.Conv1d(1, 25, 5, 2)
 
 
 class ResNet(PaperNet):
-    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num):
-        super().__init__(input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num)
+    def __init__(self, input_shape, num_classes, loss_weights_train, loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num):
+        super().__init__(input_shape, num_classes, loss_weights_train, loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num)
 
+        self.pre_process = nn.Conv1d(1, feature_num, 5, 2)
         self.resnet = resnet18(num_classes=num_classes)
+        # self.resnet = resnet34(num_classes=num_classes)
+        self.resnet.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3,
+                               bias=False)
+        self.softmax = nn.Softmax(-1)
 
     def forward(self, x):
         x = self.pre_process(x.unsqueeze(1)).unsqueeze(1)
-        # x =
-        x = self.features(x)
-        x = x.view(x.size(0), -1)
-        x = self.classifier(x)
+        x = self.resnet(x)
+        # x = self.softmax(x)
         return x
 
     def _get_conv_output(self, shape):
-        batch_size = 1
-        input = torch.autograd.Variable(torch.rand(batch_size, *shape)).cuda()
-
-        output_feat = self.features(self.pre_process(input).unsqueeze(0))
-        n_size = output_feat.data.view(batch_size, -1).size(1)
-        return n_size
-
-    def get_pre_process(self):
-        return nn.Conv1d(1, 256, 3, 1)
+        return 10  # irrelevant
 
 
 class LSTM(OneDimNet):
@@ -598,29 +689,30 @@ def get_data_module(mode, batch_size, data_path):
 
 def get_model(mode, input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num):
     if mode in ('Hwavelet', 'Dwavelet', 'Original'):
-        #model = OneDimNet(input_shape, num_classes, loss_weights_train, loss_weights_val,device, lr, weight_decay, batch_size, drop_prob, feature_num)
-        model = OneDimConvNet(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
-        #model = LSTM(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
-
+        # model = OneDimNet(input_shape, num_classes, loss_weights_train, loss_weights_val,device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        # model = OneDimConvNet(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        # model = LSTM(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        model = ResNet(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
     elif mode == 'STFT':
-        model = PaperNet(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        # model = PaperNet(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        model = ResNet(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
     return model
 
 
-mode = 'Hwavelet'  # 'Hwavelet' 'STFT' 'Dwavelet' 'Original'
+mode = 'Dwavelet'  # 'Hwavelet' 'STFT' 'Dwavelet' 'Original'
 if mode == 'Hwavelet':
-    data_path = 'HaarWavelet/only_men_with_single' #  '/inputs/TAU/SP/data/wavelets/HaarWavelet'  # '/inputs/TAU/SP/data/STFT' (all data)  # '/inputs/TAU/SP/data/wavelets/Hwavelet/only men multiple/ONLY_MEN_HAAR' (only male)
+    data_path = '/inputs/TAU/SP/data/wavelets/Hwavelet/only men multiple/ONLY_MEN_HAAR'  # '/inputs/TAU/SP/data/wavelets/HaarWavelet'  # '/inputs/TAU/SP/data/STFT' (all data)  # '/inputs/TAU/SP/data/wavelets/Hwavelet/only men multiple/ONLY_MEN_HAAR' (only male)
     input_shape = (1, 1000)
 elif mode == 'STFT':
-    data_path = '/inputs/TAU/SP/data/STFT'  # '/inputs/TAU/SP/data/stft_norm'
+    data_path = '/inputs/TAU/SP/data/stft_norm'  # '/inputs/TAU/SP/data/STFT'  # '/inputs/TAU/SP/data/stft_norm'
     input_shape = (1, 256, 256)
 elif mode == 'Dwavelet':
-    data_path = 'Daubechies6Wavelet/full_with_single'
+    data_path = '/inputs/TAU/SP/data/wavelets/Duabechies6Wavelet/full with single/full_with_single'  # '/inputs/TAU/SP/data/wavelets/Duabechies6Wavelet/only men multiple/ONLY_MEN_Daubenchies6'  # 'Daubechies6Wavelet/full_with_single'
     input_shape = (1, 1000)
 elif mode == 'Original':
     data_path = '/inputs/TAU/SP/data/original/'
-    input_shape = (1, 1000)
+    input_shape = (1, 12, 1000)
 
 
 super_classes = np.array(["CD", "HYP", "MI", "NORM", "STTC"])
@@ -630,9 +722,9 @@ MODEL_CKPT = 'model/model-{epoch:02d}-{val_loss:.2f}'
 
 
 for batch_loop in [128]: #[16, 32, 64, 256]:
-    for lr_loop in [1e-3]:#, 1e-3, 1e-4, 1e-5]:
-        for feature_num in [13]: #[10, 20, 50, 100]:
-            for drop_prob_loop in [0.2]:
+    for lr_loop in [1e-4]:#, 1e-3, 1e-4, 1e-5]:
+        for feature_num in [16]: #[10, 20, 50, 100]:
+            for drop_prob_loop in [0]:
                 print('batch_loop: ', batch_loop)
                 print('lr_loop: ', lr_loop)
                 print('feature_num: ', feature_num)
@@ -645,16 +737,13 @@ for batch_loop in [128]: #[16, 32, 64, 256]:
                 # # dm._has_setup_fit = False
                 dm.setup()
 
-                label_hist_train = list(np.unique(dm.train.dataset.targets[dm.train.indices], return_counts=True))
+                label_hist_train = list(np.unique(np.array(dm.train.dataset.targets)[dm.train.indices], return_counts=True))
                 print('label_hist: ', label_hist_train)
                 label_hist_train[1] = label_hist_train[1] / sum(label_hist_train[1])
 
-                label_hist_val = list(np.unique(dm.val.dataset.targets[dm.val.indices], return_counts=True))
+                label_hist_val = list(np.unique(np.array(dm.val.dataset.targets)[dm.val.indices], return_counts=True))
                 print('label_hist: ', label_hist_val)
                 label_hist_val[1] = label_hist_val[1] / sum(label_hist_val[1])
-
-
-
 
                 # # Samples required by the custom ImagePredictionLogger callback to log image predictions.
                 val_samples = next(iter(dm.val_dataloader()))
@@ -667,16 +756,14 @@ for batch_loop in [128]: #[16, 32, 64, 256]:
 
                 # Init our model
                 lr = lr_loop
-                weight_decay = 0
+                weight_decay = 0.0005
                 drop_prob = drop_prob_loop
                 loss_weights_train = torch.cuda.FloatTensor(label_hist_train[1])
                 loss_weights_val = torch.cuda.FloatTensor(label_hist_val[1])
 
                 model = get_model(mode, input_shape, len(super_classes), loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
-
-
-                logger = TensorBoardLogger('runs', f'Net:{str(model)}_dataPath:{data_path}_featureNum:{feature_num}_dropProbLoop:{drop_prob_loop}')
+                logger = TensorBoardLogger('runs', mode)
 
                 """## Training"""
                 print(f'Training Started of {model}!')
@@ -688,12 +775,12 @@ for batch_loop in [128]: #[16, 32, 64, 256]:
                     logger=logger,    # TB integration
                     log_every_n_steps=1,   # set the logging frequency
                     gpus=1,                # use one GPU
-                    max_epochs=400,           # number of epochs
+                    max_epochs=90,           # number of epochs
                     # deterministic=True,     # keep it deterministic
                     auto_lr_find=True,
                     callbacks=[
                                 ImagePredictionLogger(val_samples, super_classes),
-                                #ModelCheckpoint(monitor='val_loss', filename=MODEL_CKPT, save_top_k=1, mode='min')
+                                # ModelCheckpoint(monitor='val_loss', filename=MODEL_CKPT, save_top_k=1, mode='min')
                                 #  EarlyStopping(monitor='val_loss',patience=3,verbose=False,mode='min')
                                 ]  # see Callbacks section
                     )
