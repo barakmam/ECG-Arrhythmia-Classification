@@ -434,7 +434,7 @@ class OneDimNet(PaperNet):
         )
 
         self.classifier = nn.Sequential(
-            nn.Linear(1000,num_classes),
+            nn.Linear(238144,num_classes),
             nn.ReLU(),
             nn.Softmax(-1)
         )
