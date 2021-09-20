@@ -50,7 +50,7 @@ class Dataset:
 
     def load(self):
         # load and convert annotation data
-        Y = pd.read_csv(self.path + 'ptbxl_database.csv', index_col='ecg_id') #start_date_str_rep
+        Y = pd.read_csv(self.path + 'ptbxl_database.csv', index_col='ecg_id') #nrows=20
         Y.scp_codes = Y.scp_codes.apply(lambda x: ast.literal_eval(x))
 
         # Load raw signal data
