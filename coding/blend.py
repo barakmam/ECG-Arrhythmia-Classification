@@ -397,13 +397,10 @@ class Blend(Dataset):
                                 elif self.state=='MorlWavelet':
                                     mat=self.morl_dwt(ecg)
                                     mat = self.standertize_and_normalize(mat)
-
-
+                                    plt.imsave("myplot1.jpeg", np.dstack((mat[0], mat[1], mat[2], mat[3]))) #cv2.resize(mat, (4,256, 256), interpolation=cv2.INTER_CUBIC)
 
                                 else:
                                     raise Exception("wavelet statue is not supported")
-
-
 
                                 # Y
 
@@ -417,8 +414,12 @@ class Blend(Dataset):
 
                                 file_uuided = str(uuid.uuid4())
 
-                                object_name_in_gcs_bucket=self.bucket.blob('{}/full_with_single/{}/{}_{}_{}'.format(self.state,y,file_uuided,self.gender_str(gender),op))
-                                object_name_in_gcs_bucket.upload_from_string(str(mat))
+                                blob = self.bucket.blob('{}/full_5_channel_jpeg_with_single/{}/{}_{}_{}.jpeg'.format(self.state,y,file_uuided,self.gender_str(gender),op))
+                                with open("./myplot.jpeg", 'rb') as f:
+                                    blob.upload_from_file(f)
+
+                                # object_name_in_gcs_bucket=self.bucket.blob('{}/full_trancated_with_single/{}/{}_{}_{}'.format(self.state,y,file_uuided,self.gender_str(gender),op))
+                                # object_name_in_gcs_bucket.upload_from_string(str(mat.round(decimals=3)))
 
                                 # pkl_dict[dataset_type][gender][op][single].append("ONLY_MEN_{}_{}/{}".format(self.state,y,file_uuided))
                                 # pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(

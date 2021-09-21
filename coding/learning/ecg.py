@@ -173,8 +173,8 @@ class STFTDataModule(pl.LightningDataModule):
 
         self.transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Grayscale(num_output_channels=1),
-            transforms.Normalize((0.5), (0.5))
+            # transforms.Grayscale(num_output_channels=3),
+            # transforms.Normalize((0.5), (0.5))
         ])
 
     def prepare_data(self):
@@ -185,6 +185,7 @@ class STFTDataModule(pl.LightningDataModule):
     def setup(self,stage=None):
         # Assign train/val datasets for use in dataloaders
         dataset = ImageFolder(self.image_folder_path, self.transform)
+        # dataset=torch.utils.data.Subset(dataset,np.random.choice(len(dataset), 1000, replace=False))
         if stage == 'train' or stage is None:
             self.train, self.val = random_split(dataset,
                                                 [int(len(dataset)*0.8),
@@ -220,7 +221,7 @@ class OneDimDataModule(pl.LightningDataModule):
 
         self.transform = transforms.Compose([
             transforms.ToTensor(),
-            #transforms.Grayscale(num_output_channels=12),
+            #transforms.Grayscale(num_output_channels=1),
             # transforms.Normalize((0.5), (0.5))
         ])
 
@@ -278,17 +279,17 @@ class PaperNet(pl.LightningModule):
 
         self.pre_process = self.get_pre_process().to(device)
         self.features = nn.Sequential(
-            nn.Conv2d(1, 8, 4),
+            nn.Conv2d(3, 8, 4),
             nn.BatchNorm2d(8),
             nn.ReLU(),
-            # nn.MaxPool2d(2),
-            # nn.Conv2d(8, 13, 3),
-            # nn.BatchNorm2d(13),
-            # nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.Conv2d(8, 13, 3),
+            nn.BatchNorm2d(13),
+            nn.ReLU(),
             # nn.MaxPool2d(2),
             # nn.Conv2d(13, 13, 3),
             # nn.BatchNorm2d(13),
-            nn.ReLU(),
+            # nn.ReLU(),
         ).to(device)
 
         self.features_num = self._get_conv_output(input_shape)
@@ -443,7 +444,6 @@ class OneDimNet(PaperNet):
         return "OneDimNet"
 
     def forward(self, x):
-        x = x.squeeze()
         x = self.features(x)
         x = self.classifier(x)
         return x
@@ -588,7 +588,7 @@ def get_model(mode, input_shape, num_classes, loss_weights_train, loss_weights_v
     return model
 
 
-mode = 'Mwavelet'  # 'Mwavelet' 'Hwavelet' 'STFT' 'Dwavelet' 'Original'
+mode = 'STFT'  # 'Mwavelet' 'Hwavelet' 'STFT' 'Dwavelet' 'Original'
 if mode == 'Hwavelet':
     data_path = 'HaarWavelet/full_with_single' #  '/inputs/TAU/SP/data/wavelets/HaarWavelet'  # '/inputs/TAU/SP/data/STFT' (all data)  # '/inputs/TAU/SP/data/wavelets/Hwavelet/only men multiple/ONLY_MEN_HAAR' (only male)
     input_shape = (1, 1000)
@@ -596,11 +596,11 @@ elif mode == 'Dwavelet':
     data_path = 'Daubechies6Wavelet/full_with_single'
     input_shape = (1, 1000)
 elif mode == 'Mwavelet':
-    data_path = 'MorlWavelet/full_with_single'
-    input_shape = (12, 256, 256)
-elif mode == 'STFT':
-    data_path = '/inputs/TAU/SP/data/STFT'  # '/inputs/TAU/SP/data/stft_norm'
+    data_path = 'MorlWavelet/full_1_channel_with_single'
     input_shape = (1, 256, 256)
+elif mode == 'STFT':
+    data_path = 'MorlWavelet/full_3_channel_jpeg_with_single'  # '/inputs/TAU/SP/data/stft_norm'
+    input_shape = (3, 256, 256)
 elif mode == 'Original':
     data_path = '/inputs/TAU/SP/data/original/'
     input_shape = (1, 1000)
@@ -612,7 +612,7 @@ MODEL_CKPT_PATH = 'model/'
 MODEL_CKPT = 'model/model-{epoch:02d}-{val_loss:.2f}'
 
 
-for batch_loop in [32]: #[16, 32, 64, 256]:
+for batch_loop in [128]: #[16, 32, 64, 256]:
     for lr_loop in [1e-4]:#, 1e-3, 1e-4, 1e-5]:
         for feature_num in [13]: #[10, 20, 50, 100]:
             for drop_prob_loop in [0.2]:
@@ -628,12 +628,12 @@ for batch_loop in [32]: #[16, 32, 64, 256]:
                 # # dm._has_setup_fit = False
                 dm.setup()
 
-                label_hist_train = list(np.unique(dm.train.dataset.targets[dm.train.indices], return_counts=True))
+                label_hist_train = list(np.unique(np.array(dm.train.dataset.targets)[dm.train.indices], return_counts=True))
                 print('label_hist: ', label_hist_train)
                 label_hist_train[1] = label_hist_train[1] / sum(label_hist_train[1])
                 print(f"weigts_train:{label_hist_train[1]}")
 
-                label_hist_val = list(np.unique(dm.val.dataset.targets[dm.val.indices], return_counts=True))
+                label_hist_val = list(np.unique(np.array(dm.val.dataset.targets)[dm.val.indices], return_counts=True))
                 print('label_hist: ', label_hist_val)
                 label_hist_val[1] = label_hist_val[1] / sum(label_hist_val[1])
                 print(f"weigts_val:{label_hist_val[1]}")
@@ -654,8 +654,10 @@ for batch_loop in [32]: #[16, 32, 64, 256]:
                 lr = lr_loop
                 weight_decay = 0
                 drop_prob = drop_prob_loop
-                loss_weights_train = torch.cuda.FloatTensor(label_hist_train[1])
-                loss_weights_val = torch.cuda.FloatTensor(label_hist_val[1])
+                N_train=len(dm.train.indices)
+                N_val=len(dm.val.indices)
+                loss_weights_train = torch.cuda.FloatTensor(1/label_hist_train[1])
+                loss_weights_val = torch.cuda.FloatTensor(1/label_hist_val[1])
 
                 model = get_model(mode, input_shape, len(super_classes), loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
@@ -671,7 +673,7 @@ for batch_loop in [32]: #[16, 32, 64, 256]:
                     logger=logger,    # TB integration
                     log_every_n_steps=1,   # set the logging frequency
                     gpus=1,                # use one GPU
-                    max_epochs=400,           # number of epochs
+                    max_epochs=2500,           # number of epochs
                     # deterministic=True,     # keep it deterministic
                     auto_lr_find=True,
                     callbacks=[
