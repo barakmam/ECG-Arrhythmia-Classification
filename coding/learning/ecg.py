@@ -654,8 +654,8 @@ for batch_loop in [128]: #[16, 32, 64, 256]:
                 lr = lr_loop
                 weight_decay = 0
                 drop_prob = drop_prob_loop
-                loss_weights_train = torch.cuda.FloatTensor(label_hist_train[1])
-                loss_weights_val = torch.cuda.FloatTensor(label_hist_val[1])
+                loss_weights_train = torch.cuda.FloatTensor(1/label_hist_train[1])
+                loss_weights_val = torch.cuda.FloatTensor(1/label_hist_val[1])
 
                 model = get_model(mode, input_shape, len(super_classes), loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
