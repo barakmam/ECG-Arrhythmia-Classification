@@ -173,8 +173,8 @@ class STFTDataModule(pl.LightningDataModule):
 
         self.transform = transforms.Compose([
             transforms.ToTensor(),
-            # transforms.Grayscale(num_output_channels=3),
-            # transforms.Normalize((0.5), (0.5))
+            transforms.Grayscale(num_output_channels=3),
+            transforms.Normalize((0.5), (0.5))
         ])
 
     def prepare_data(self):
@@ -286,10 +286,10 @@ class PaperNet(pl.LightningModule):
             nn.Conv2d(8, 13, 3),
             nn.BatchNorm2d(13),
             nn.ReLU(),
-            # nn.MaxPool2d(2),
-            # nn.Conv2d(13, 13, 3),
-            # nn.BatchNorm2d(13),
-            # nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.Conv2d(13, 13, 3),
+            nn.BatchNorm2d(13),
+            nn.ReLU(),
         ).to(device)
 
         self.features_num = self._get_conv_output(input_shape)
@@ -599,7 +599,7 @@ elif mode == 'Mwavelet':
     data_path = 'MorlWavelet/full_1_channel_with_single'
     input_shape = (1, 256, 256)
 elif mode == 'STFT':
-    data_path = 'MorlWavelet/full_3_channel_jpeg_with_single'  # '/inputs/TAU/SP/data/stft_norm'
+    data_path = 'MorlWavelet/full_3_channel_jpeg_with_single'
     input_shape = (3, 256, 256)
 elif mode == 'Original':
     data_path = '/inputs/TAU/SP/data/original/'
@@ -654,10 +654,8 @@ for batch_loop in [128]: #[16, 32, 64, 256]:
                 lr = lr_loop
                 weight_decay = 0
                 drop_prob = drop_prob_loop
-                N_train=len(dm.train.indices)
-                N_val=len(dm.val.indices)
-                loss_weights_train = torch.cuda.FloatTensor(1/label_hist_train[1])
-                loss_weights_val = torch.cuda.FloatTensor(1/label_hist_val[1])
+                loss_weights_train = torch.cuda.FloatTensor(label_hist_train[1])
+                loss_weights_val = torch.cuda.FloatTensor(label_hist_val[1])
 
                 model = get_model(mode, input_shape, len(super_classes), loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
