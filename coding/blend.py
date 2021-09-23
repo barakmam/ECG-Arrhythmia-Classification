@@ -17,7 +17,7 @@ import pywt
 import sys
 np.set_printoptions(threshold=sys.maxsize)
 import scipy
-from gammatone.gammatone.plot import render_audio_from_file
+from coding.gammatone.plot import render_audio_from_file
 
 
 ##
