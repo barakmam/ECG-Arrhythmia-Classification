@@ -16,6 +16,10 @@ import cv2
 import pywt
 import sys
 np.set_printoptions(threshold=sys.maxsize)
+import scipy
+from gammatone.gammatone.plot import render_audio_from_file
+
+
 
 ## Setting credentials using the downloaded JSON file
 path = 'model-azimuth-321409-241148a4b144.json'
@@ -44,7 +48,7 @@ class Blend(Dataset):
         self.X_test = data["X_test"]
         self.X_test_meta = data["X_test_meta"]
         self.y_test = data["y_test"]
-        self.state = 'MorlWavelet'  # expected {STFT, MorlWavelet ,permutation,HaarWavelet,Daubechies6Wavelet}
+        self.state = 'Gammatone'  # expected {STFT, MorlWavelet ,permutation,HaarWavelet,Daubechies6Wavelet, Gammatone}
         self.bucket = client.get_bucket('ecg-arrhythmia-classification')
 
         # datasttruct
@@ -276,6 +280,14 @@ class Blend(Dataset):
         return coeff_
 
 
+    def gammaton_dwt(self,signal):
+        coeff_ = []
+        for i in range(3):
+            coeff = render_audio_from_file(signal[i])
+            coeff_.append(coeff)
+        return coeff_
+
+
 
     def daubechies6_dwt(self,signal,levels=3):
         """
@@ -396,6 +408,10 @@ class Blend(Dataset):
 
                                 elif self.state=='MorlWavelet':
                                     mat=self.morl_dwt(ecg)
+                                    mat = self.standertize_and_normalize(mat)
+
+                                elif self.state=='Gammatone':
+                                    mat = self.gammaton_dwt(ecg)
                                     mat = self.standertize_and_normalize(mat)
 
 

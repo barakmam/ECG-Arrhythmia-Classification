@@ -9,3 +9,6 @@ torchvision
 GPUtil
 numba
 PyWavelets==1.1.1
+numpy
+nose
+mock
