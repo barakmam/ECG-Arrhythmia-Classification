@@ -48,7 +48,7 @@ class Blend(Dataset):
         self.X_test = data["X_test"]
         self.X_test_meta = data["X_test_meta"]
         self.y_test = data["y_test"]
-        self.state = 'Gammatone'  # expected {STFT, MorlWavelet ,permutation,HaarWavelet,Daubechies6Wavelet, Gammatone}
+        self.state = 'GammatoneWavelet'  # expected {STFT_JPEG, MorlWavelet, GammatoneWavelet ,permutation,HaarWavelet,Daubechies6Wavelet }
         self.bucket = client.get_bucket('ecg-arrhythmia-classification')
 
         # datasttruct
@@ -284,7 +284,7 @@ class Blend(Dataset):
         coeff_ = []
         for i in range(3):
             coeff = render_audio_from_file(signal[i])
-            coeff_.append(coeff)
+            coeff_.append(coeff[:247,:])
         return coeff_
 
 
@@ -305,6 +305,7 @@ class Blend(Dataset):
         standard_mat = (mat - np.mean(mat)) / np.std(mat)
         max, min = np.max(standard_mat), np.min(standard_mat)
         return (standard_mat - min) / (max - min)
+
 
     def gcs_bucket(self, d):
         """
@@ -409,10 +410,14 @@ class Blend(Dataset):
                                 elif self.state=='MorlWavelet':
                                     mat=self.morl_dwt(ecg)
                                     mat = self.standertize_and_normalize(mat)
+                                    plt.imsave("myplot.jpeg", np.dstack((mat[0], mat[1], mat[
+                                        2])))  # cv2.resize(mat, (4,256, 256), interpolation=cv2.INTER_CUBIC)
 
-                                elif self.state=='Gammatone':
+                                elif self.state=='GammatoneWavelet':
                                     mat = self.gammaton_dwt(ecg)
                                     mat = self.standertize_and_normalize(mat)
+                                    plt.imsave("myplot.jpeg", np.dstack((mat[0], mat[1], mat[
+                                        2])))  # cv2.resize(mat, (4,256, 256), interpolation=cv2.INTER_CUBIC)
 
 
 
@@ -428,13 +433,16 @@ class Blend(Dataset):
                                     print("skipped...")
                                     break
 
-                                y=y[0]
                                 pkl_dict[dataset_type][gender][op][f"Y_{single}"].append(super_classes[y])
 
                                 file_uuided = str(uuid.uuid4())
 
-                                object_name_in_gcs_bucket=self.bucket.blob('{}/full_with_single/{}/{}_{}_{}'.format(self.state,y,file_uuided,self.gender_str(gender),op))
-                                object_name_in_gcs_bucket.upload_from_string(str(mat))
+                                blob = self.bucket.blob('{}/full_3_channel_jpeg_with_single/{}/{}_{}_{}.jpeg'.format(self.state,y,file_uuided,self.gender_str(gender),op))
+                                with open("./myplot.jpeg", 'rb') as f:
+                                    blob.upload_from_file(f)
+
+                                # object_name_in_gcs_bucket=self.bucket.blob('{}/full_trancated_with_single/{}/{}_{}_{}'.format(self.state,y,file_uuided,self.gender_str(gender),op))
+                                # object_name_in_gcs_bucket.upload_from_string(str(mat.round(decimals=3)))
 
                                 # pkl_dict[dataset_type][gender][op][single].append("ONLY_MEN_{}_{}/{}".format(self.state,y,file_uuided))
                                 # pkl_dict[dataset_type][gender][op][f"meta_{single}"].append(

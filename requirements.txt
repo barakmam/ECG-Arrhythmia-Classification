@@ -12,3 +12,5 @@ PyWavelets==1.1.1
 numpy
 nose
 mock
+wfdb
+opencv-python

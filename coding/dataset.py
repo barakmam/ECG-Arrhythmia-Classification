@@ -7,7 +7,7 @@ import collections
 class Dataset:
     def __init__(self):
 
-        self.path = './data/'
+        self.path = './toy_data/'
         self.sampling_rate = 100
 
         # Load scp_statements.csv for diagnostic aggregation
@@ -19,11 +19,9 @@ class Dataset:
         for key in y_dic.keys():
             if y_dic[key] > 10 and key in self.agg_df.index:
                 tmp.append(self.agg_df.loc[key].diagnostic_class)
-        # if 'HYP' in tmp:
-        #     return 'HYP'
         if len(tmp) > 0:
             return collections.Counter(tmp).most_common()[0][0]
-        return None
+        return []
 
     def load_raw_data(self, df, sampling_rate, path):
         if sampling_rate == 100:
@@ -50,7 +48,7 @@ class Dataset:
 
     def load(self):
         # load and convert annotation data
-        Y = pd.read_csv(self.path + 'ptbxl_database.csv', index_col='ecg_id', nrows=20) #nrows
+        Y = pd.read_csv(self.path + 'ptbxl_database.csv', index_col='ecg_id') #nrows
         Y.scp_codes = Y.scp_codes.apply(lambda x: ast.literal_eval(x))
 
         # Load raw signal data
