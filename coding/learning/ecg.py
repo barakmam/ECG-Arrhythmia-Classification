@@ -295,6 +295,7 @@ class STFTDataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         # Assign train/val datasets for use in dataloaders
         dataset = ImageFolder(self.image_folder_path, self.transform)
+        # dataset=torch.utils.data.Subset(dataset,np.random.choice(len(dataset), 1000, replace=False))
         if stage == 'train' or stage is None:
             self.train, self.val = random_split(dataset,
                                                 [int(len(dataset)*0.8),
@@ -770,8 +771,8 @@ for batch_loop in [16]: #[16, 32, 64, 256]:
                 lr = lr_loop
                 weight_decay = 0
                 drop_prob = drop_prob_loop
-                loss_weights_train = torch.cuda.FloatTensor(label_hist_train[1])
-                loss_weights_val = torch.cuda.FloatTensor(label_hist_val[1])
+                loss_weights_train = torch.cuda.FloatTensor(1/label_hist_train[1])
+                loss_weights_val = torch.cuda.FloatTensor(1/label_hist_val[1])
 
                 model = get_model(mode, input_shape, len(super_classes), loss_weights_train, loss_weights_val, device,
                                   lr, weight_decay, batch_size, drop_prob, feature_num)
