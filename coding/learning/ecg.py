@@ -30,6 +30,7 @@ import wfdb
 import ast
 import pandas as pd
 import pickle
+import collections
 
 # setting device on GPU if available, else CPU
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -43,6 +44,99 @@ torch.manual_seed(seed)
 np.random.seed(seed)
 
 """## Data"""
+
+
+class OriginalImageData(Dataset):
+    def __init__(self, path, transform=None):
+
+        # # load and convert annotation data
+        # Y = pd.read_csv(path + 'ptbxl_database.csv', index_col='ecg_id')
+        # Y.scp_codes = Y.scp_codes.apply(lambda x: ast.literal_eval(x))
+        #
+        # # Load raw signal data
+        # sampling_rate = 100
+        # X = self.load_raw_data(Y, sampling_rate, path)
+        #
+        # # Load scp_statements.csv for diagnostic aggregation
+        self.agg_df = pd.read_csv(path + 'scp_statements.csv', index_col=0)
+        self.agg_df = self.agg_df[self.agg_df.diagnostic == 1]
+
+
+        # with open(path + 'Y_metadata.pickle', 'wb') as handle:
+        #     pickle.dump(Y, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+        with open(path + 'signals.pickle', 'rb') as handle:
+            X = pickle.load(handle)
+        with open(path + 'Y_metadata.pickle', 'rb') as handle:
+            Y = pickle.load(handle)
+
+        classes_dict = {"CD": 0, "HYP": 1, "MI": 2, "NORM": 3, "STTC": 4}
+        # Apply diagnostic superclass
+        Y['diagnostic_superclass'] = Y.scp_codes.apply(self.aggregate_diagnostic)
+        Ya = Y['diagnostic_superclass'].to_numpy()
+        Yb = np.array([classes_dict[y] if y is not None else None for y in Ya])
+
+        max_inds_per_class = 4000
+        dataset_inds = []
+        for curr_class in classes_dict.values():
+            class_inds = np.where(Yb == curr_class)[0]
+            np.random.shuffle(class_inds)
+            dataset_inds.extend(class_inds[:max_inds_per_class])
+        dataset_inds = np.array(dataset_inds)
+
+        self.data = X[dataset_inds].astype(np.float32)  # take only the 0 measurement for now
+        self.targets = torch.LongTensor(Yb[dataset_inds].astype(np.int8))
+
+        # proper_label_inds = np.where(Yb != None)[0]
+        # self.data = X[proper_label_inds, 0, :]  # take only the 0 measurement for now
+        # self.targets = torch.LongTensor(Yb[proper_label_inds].astype(np.int8))
+
+        # Split data into train and test
+        # test_fold = 10
+        # Train
+        # X_train = X[np.where(Y.strat_fold != test_fold)]
+        # y_train = Y[(Y.strat_fold != test_fold)].diagnostic_superclass
+        # Test
+        # X_test = X[np.where(Y.strat_fold == test_fold)]
+        # y_test = Y[Y.strat_fold == test_fold].diagnostic_superclass
+        # y_single_label = []
+
+        # self.data = X_train
+        # self.targets = torch.LongTensor(y_train)
+        self.transform = transform
+
+    def __getitem__(self, index):
+        x = self.data[[index]].transpose(1, 2, 0)
+        y = self.targets[index]
+
+        if self.transform:
+            x = self.transform(x)
+
+        return x, y
+
+    def __len__(self):
+        return len(self.data)
+
+    def load_raw_data(self, df, sampling_rate, path):
+        if sampling_rate == 100:
+            data = [wfdb.rdsamp(path + f) for f in df.filename_lr]
+        else:
+            data = [wfdb.rdsamp(path + f) for f in df.filename_hr]
+        data = np.array([signal for signal, meta in data])
+        return data
+
+    def aggregate_diagnostic(self, y_dic):
+        tmp = []
+        for key in y_dic.keys():
+            if y_dic[key] > 10 and key in self.agg_df.index:
+                tmp.append(self.agg_df.loc[key].diagnostic_class)
+        # if 'HYP' in tmp:
+        #     return 'HYP'
+        if len(tmp) > 0:
+            return collections.Counter(tmp).most_common()[0][0]
+        return None
+        # return list(set(tmp))
+
 
 
 class OriginalData(Dataset):
@@ -136,7 +230,7 @@ class OriginalData(Dataset):
 
 class WaveletData(Dataset):
     def __init__(self, path, transform=None):
-        classes_names = os.listdir(path)
+        classes_names = sorted(os.listdir(path))
         self.data = []
         self.targets = []
         for ii, curr_class in enumerate(classes_names):
@@ -164,6 +258,22 @@ class WaveletData(Dataset):
         return len(self.data)
 
 
+class MorlWavelet(WaveletData):
+    def __init__(self, path, transform=None):
+        super().__init__(path, transform)
+
+    def __getitem__(self, index):
+        x = np.load(self.data[index]).transpose(1, 2, 0)
+        y = self.targets[index]
+
+        # x = torch.Tensor(x)
+        # x = (x - x.mean())/torch.std(x)
+        if self.transform:
+            x = self.transform(x)
+
+        return x, y
+
+
 class STFTDataModule(pl.LightningDataModule):
     def __init__(self, batch_size, image_folder_path, transform=None):
         super().__init__()
@@ -182,7 +292,7 @@ class STFTDataModule(pl.LightningDataModule):
         # PtbData(self.data_map_url, self.gender, self.under_50, self.state, download=True, transform=self.transform)
         pass
 
-    def setup(self,stage=None):
+    def setup(self, stage=None):
         # Assign train/val datasets for use in dataloaders
         dataset = ImageFolder(self.image_folder_path, self.transform)
         if stage == 'train' or stage is None:
@@ -218,7 +328,10 @@ class OneDimDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.folder_path = folder_path
 
-        self.transform = transforms.Compose([
+        if transform:
+            self.transform = transform
+        else:
+            self.transform = transforms.Compose([
             transforms.ToTensor(),
             #transforms.Grayscale(num_output_channels=12),
             # transforms.Normalize((0.5), (0.5))
@@ -227,7 +340,7 @@ class OneDimDataModule(pl.LightningDataModule):
     def prepare_data(self):
         pass
 
-    def setup(self,stage=None):
+    def setup(self, stage=None):
         # Assign train/val datasets for use in dataloaders
         dataset = self.get_data(mode)
         if stage == 'train' or stage is None:
@@ -253,15 +366,21 @@ class OneDimDataModule(pl.LightningDataModule):
         return DataLoader(self.test, batch_size=self.batch_size, num_workers=4)
 
     def get_data(self, mode):
-        if mode in ('Hwavelet', 'Dwavelet', 'Mwavelet' ):
+        if mode in ('Hwavelet', 'Dwavelet', 'Mwavelet'):
             return WaveletData(self.folder_path, self.transform)
-        else:
+        elif mode == 'Original':
             return OriginalData(self.folder_path, self.transform)
+        elif mode == 'MorlWavelet':
+            transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize([0.5]*12, [0.5]*12)
+             ])
+            return MorlWavelet(self.folder_path, transform)
 
 
 class PaperNet(pl.LightningModule):
     """## Model"""
-    def __init__(self, input_shape, num_classes, loss_weights_train,loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob=0, num_features_fc=13):
+    def __init__(self, input_shape, num_classes, loss_weights_train, loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob=0, num_features_fc=13):
         super().__init__()
 
         # log hyper-parameters
@@ -278,16 +397,16 @@ class PaperNet(pl.LightningModule):
 
         self.pre_process = self.get_pre_process().to(device)
         self.features = nn.Sequential(
-            nn.Conv2d(1, 8, 4),
+            nn.Conv2d(input_shape[0], 8, 4),
             nn.BatchNorm2d(8),
             nn.ReLU(),
-            # nn.MaxPool2d(2),
-            # nn.Conv2d(8, 13, 3),
-            # nn.BatchNorm2d(13),
-            # nn.ReLU(),
-            # nn.MaxPool2d(2),
-            # nn.Conv2d(13, 13, 3),
-            # nn.BatchNorm2d(13),
+            nn.MaxPool2d(2),
+            nn.Conv2d(8, 13, 3),
+            nn.BatchNorm2d(13),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.Conv2d(13, 13, 3),
+            nn.BatchNorm2d(13),
             nn.ReLU(),
         ).to(device)
 
@@ -479,29 +598,20 @@ class OneDimConvNet(PaperNet):
 
 
 class ResNet(PaperNet):
-    def __init__(self, input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num):
-        super().__init__(input_shape, num_classes, loss_weights, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num)
+    def __init__(self, input_shape, num_classes, loss_weights_train, loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num):
+        super().__init__(input_shape, num_classes, loss_weights_train, loss_weights_val, device, learning_rate, weight_decay, batch_size, drop_prob, feature_num)
 
         self.resnet = resnet18(num_classes=num_classes)
+        self.resnet.conv1 = nn.Conv2d(input_shape[0], 64, kernel_size=7, stride=2, padding=3,
+                               bias=False)
+        self.resnet.to(device)
 
     def forward(self, x):
-        x = self.pre_process(x.unsqueeze(1)).unsqueeze(1)
-        # x =
-        x = self.features(x)
-        x = x.view(x.size(0), -1)
-        x = self.classifier(x)
+        x = self.resnet(x)
         return x
 
     def _get_conv_output(self, shape):
-        batch_size = 1
-        input = torch.autograd.Variable(torch.rand(batch_size, *shape)).cuda()
-
-        output_feat = self.features(self.pre_process(input).unsqueeze(0))
-        n_size = output_feat.data.view(batch_size, -1).size(1)
-        return n_size
-
-    def get_pre_process(self):
-        return nn.Conv1d(1, 256, 3, 1)
+        return 10 # irrelevant
 
 
 class LSTM(OneDimNet):
@@ -568,8 +678,8 @@ def loader(path):
     return wavelet
 
 
-def get_data_module(mode, batch_size, data_path):
-    if mode in ('Hwavelet', 'Dwavelet', 'Mwavelet', 'Original'):
+def get_data_module(mode, batch_size, data_path, tranform=None):
+    if mode in ('Hwavelet', 'Dwavelet', 'Mwavelet', 'Original', 'MorlWavelet'):
         dm = OneDimDataModule(batch_size, data_path)
     elif mode == 'STFT':
         dm = STFTDataModule(batch_size, data_path)
@@ -578,17 +688,21 @@ def get_data_module(mode, batch_size, data_path):
 
 def get_model(mode, input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num):
     if mode in ('Hwavelet', 'Dwavelet', 'Mwavelet','Original'):
-        model = OneDimNet(input_shape, num_classes, loss_weights_train, loss_weights_val,device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        model = OneDimNet(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
         #model = OneDimConvNet(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
         #model = LSTM(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
     elif mode == 'STFT':
         model = PaperNet(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
 
+    elif mode == 'MorlWavelet':
+        model = ResNet(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+        # model = PaperNet(input_shape, num_classes, loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+
     return model
 
 
-mode = 'Mwavelet'  # 'Mwavelet' 'Hwavelet' 'STFT' 'Dwavelet' 'Original'
+mode = 'MorlWavelet'  # 'Mwavelet' 'Hwavelet' 'STFT' 'Dwavelet' 'Original' 'MorlWavelet'
 if mode == 'Hwavelet':
     data_path = 'HaarWavelet/full_with_single' #  '/inputs/TAU/SP/data/wavelets/HaarWavelet'  # '/inputs/TAU/SP/data/STFT' (all data)  # '/inputs/TAU/SP/data/wavelets/Hwavelet/only men multiple/ONLY_MEN_HAAR' (only male)
     input_shape = (1, 1000)
@@ -604,18 +718,23 @@ elif mode == 'STFT':
 elif mode == 'Original':
     data_path = '/inputs/TAU/SP/data/original/'
     input_shape = (1, 1000)
+elif mode == 'MorlWavelet':
+    data_path = '/inputs/TAU/SP/data/wavelets/MorlWavelet/full_with_single_uint8'
+    input_shape = (12, 256, 256)
 
-super_classes = np.array(["HYP","MI", "NORM", "CD", "STTC"])
+
+# super_classes = np.array(["HYP", "MI", "NORM", "CD", "STTC"])
+super_classes = np.array(['CD', 'HYP', 'MI', 'NORM', 'STTC'])
 #super_classes = np.array(["MI", "NORM", "CD", "STTC"])
 
 MODEL_CKPT_PATH = 'model/'
 MODEL_CKPT = 'model/model-{epoch:02d}-{val_loss:.2f}'
 
 
-for batch_loop in [32]: #[16, 32, 64, 256]:
-    for lr_loop in [1e-4]:#, 1e-3, 1e-4, 1e-5]:
+for batch_loop in [16]: #[16, 32, 64, 256]:
+    for lr_loop in [1e-5]:#, 1e-3, 1e-4, 1e-5]:
         for feature_num in [13]: #[10, 20, 50, 100]:
-            for drop_prob_loop in [0.2]:
+            for drop_prob_loop in [0]:
                 print('batch_loop: ', batch_loop)
                 print('lr_loop: ', lr_loop)
                 print('feature_num: ', feature_num)
@@ -628,18 +747,15 @@ for batch_loop in [32]: #[16, 32, 64, 256]:
                 # # dm._has_setup_fit = False
                 dm.setup()
 
-                label_hist_train = list(np.unique(dm.train.dataset.targets[dm.train.indices], return_counts=True))
+                label_hist_train = list(np.unique(np.array(dm.train.dataset.targets)[dm.train.indices], return_counts=True))
                 print('label_hist: ', label_hist_train)
                 label_hist_train[1] = label_hist_train[1] / sum(label_hist_train[1])
                 print(f"weigts_train:{label_hist_train[1]}")
 
-                label_hist_val = list(np.unique(dm.val.dataset.targets[dm.val.indices], return_counts=True))
+                label_hist_val = list(np.unique(np.array(dm.val.dataset.targets)[dm.val.indices], return_counts=True))
                 print('label_hist: ', label_hist_val)
                 label_hist_val[1] = label_hist_val[1] / sum(label_hist_val[1])
                 print(f"weigts_val:{label_hist_val[1]}")
-
-
-
 
                 # # Samples required by the custom ImagePredictionLogger callback to log image predictions.
                 val_samples = next(iter(dm.val_dataloader()))
@@ -657,26 +773,25 @@ for batch_loop in [32]: #[16, 32, 64, 256]:
                 loss_weights_train = torch.cuda.FloatTensor(label_hist_train[1])
                 loss_weights_val = torch.cuda.FloatTensor(label_hist_val[1])
 
-                model = get_model(mode, input_shape, len(super_classes), loss_weights_train, loss_weights_val, device, lr, weight_decay, batch_size, drop_prob, feature_num)
+                model = get_model(mode, input_shape, len(super_classes), loss_weights_train, loss_weights_val, device,
+                                  lr, weight_decay, batch_size, drop_prob, feature_num)
 
-
-
-                logger = TensorBoardLogger('runs', f'Net:{str(model)}_dataPath:{data_path}_featureNum:{feature_num}_dropProbLoop:{drop_prob_loop}')
+                logger = TensorBoardLogger('runs', mode)
 
                 """## Training"""
                 print(f'Training Started of {model}!')
                 trainer = pl.Trainer(
-                    gradient_clip_val=0.5,
-                    stochastic_weight_avg=True,
+                    # gradient_clip_val=0.5,
+                    # stochastic_weight_avg=True,
                     logger=logger,    # TB integration
                     log_every_n_steps=1,   # set the logging frequency
                     gpus=1,                # use one GPU
-                    max_epochs=400,           # number of epochs
+                    max_epochs=50,           # number of epochs
                     # deterministic=True,     # keep it deterministic
                     auto_lr_find=True,
                     callbacks=[
                                 ImagePredictionLogger(val_samples, super_classes),
-                                #ModelCheckpoint(monitor='val_loss', filename=MODEL_CKPT, save_top_k=1, mode='min')
+                                ModelCheckpoint(monitor='val_loss', filename=MODEL_CKPT, save_top_k=1, mode='min')
                                 #  EarlyStopping(monitor='val_loss',patience=3,verbose=False,mode='min')
                                 ]  # see Callbacks section
                     )
