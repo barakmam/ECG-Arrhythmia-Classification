@@ -12,6 +12,7 @@ dataset/
 /STFT/
 /STFT_bucket/
 /HaarWavelet/
+/MorlWavelet/
 /ONLY_MEN_Daubenchies6/
 /ONLY_MEN_HAAR/
 /Daubechies6Wavelet/

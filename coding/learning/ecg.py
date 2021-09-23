@@ -295,7 +295,6 @@ class STFTDataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         # Assign train/val datasets for use in dataloaders
         dataset = ImageFolder(self.image_folder_path, self.transform)
-        # dataset=torch.utils.data.Subset(dataset,np.random.choice(len(dataset), 1000, replace=False))
         if stage == 'train' or stage is None:
             self.train, self.val = random_split(dataset,
                                                 [int(len(dataset)*0.8),

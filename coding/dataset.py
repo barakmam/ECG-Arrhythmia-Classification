@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import wfdb
 import ast
-
+import collections
 
 class Dataset:
     def __init__(self):
@@ -17,13 +17,13 @@ class Dataset:
     def aggregate_diagnostic(self, y_dic):
         tmp = []
         for key in y_dic.keys():
-            if key in self.agg_df.index:
+            if y_dic[key] > 10 and key in self.agg_df.index:
                 tmp.append(self.agg_df.loc[key].diagnostic_class)
-                return tmp
-        #
-        # if len(tmp)>1:
-        #     tmp=[]
-        # return tmp
+        # if 'HYP' in tmp:
+        #     return 'HYP'
+        if len(tmp) > 0:
+            return collections.Counter(tmp).most_common()[0][0]
+        return None
 
     def load_raw_data(self, df, sampling_rate, path):
         if sampling_rate == 100:
@@ -50,7 +50,7 @@ class Dataset:
 
     def load(self):
         # load and convert annotation data
-        Y = pd.read_csv(self.path + 'ptbxl_database.csv', index_col='ecg_id') #nrows=20
+        Y = pd.read_csv(self.path + 'ptbxl_database.csv', index_col='ecg_id')
         Y.scp_codes = Y.scp_codes.apply(lambda x: ast.literal_eval(x))
 
         # Load raw signal data
