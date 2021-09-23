@@ -20,7 +20,7 @@ import scipy
 from gammatone.gammatone.plot import render_audio_from_file
 
 
-
+##
 ## Setting credentials using the downloaded JSON file
 path = 'model-azimuth-321409-241148a4b144.json'
 if not os.path.isfile(path):
