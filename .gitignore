@@ -3,6 +3,7 @@ mit_data/
 .data/complete
 *.xml
 *.iml
+*.jpeg
 dataset/
 /model-azimuth-321409-241148a4b144.json
 /data/
